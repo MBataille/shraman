@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
-from scipy.sparse import diags
 import os
 #from pathlib import Path
 
@@ -9,7 +8,7 @@ BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DATADIR = os.path.join(BASEDIR, 'data', '')
 
 def ptoname(eta, mu, gamma):
-    return f'eta={eta}_mu={mu}_gamma={gamma}'
+    return f'eta={round(eta, 5)}_mu={round(mu, 5)}_gamma={round(gamma, 5)}'
 
 class SHRaman:
     def __init__(self, **params):
@@ -24,6 +23,8 @@ class SHRaman:
             self.branch = params['branch']
             self.branchfolder = os.path.join(DATADIR, self.branch, '')
             if not os.path.exists(self.branchfolder):
+                if not os.path.exists(DATADIR):
+                    os.mkdir(DATADIR)
                 os.mkdir(self.branchfolder)
 
         # Initialize FFT of Coupling kernel

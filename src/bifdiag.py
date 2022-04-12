@@ -1,8 +1,6 @@
-from more_itertools import last
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from pytest import param
 from alive_progress import alive_bar
 
 from shraman import SHRaman, DATADIR
@@ -40,12 +38,12 @@ def parameterSweep(param_name, param_range, **other_params):
             shr.saveState()
 
             vs[i], verrs[i] = shr.getVelocity()
-            print(f'Velocity for {param_name} = {param_val} is {vs[i]}')
+            # print(f'Velocity for {param_name} = {param_val} is {vs[i]}')
             bar()
 
     data = {param_name: param_range, 'v': vs, 'verr': verrs}
-    df = pd.DataFrame(DATADIR + data)
-    df.to_csv(branch + '.csv')
+    df = pd.DataFrame(data)
+    df.to_csv(DATADIR + branch + '.csv')
 
 ######
 def getPrange(p0, pf, dp):
@@ -56,10 +54,10 @@ def getPrange(p0, pf, dp):
 
 if __name__ == '__main__':
 
-    branch = 'gtest'
-    pname = 'gamma'
-    p0 = 0.5
-    pf = 0.9
+    branch = 'm1'
+    pname = 'mu'
+    p0 = -0.05
+    pf = -0.5
     dp = 0.001
     # branch = sys.argv[1]
     # pname = sys.argv[2]
