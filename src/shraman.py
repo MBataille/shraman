@@ -39,9 +39,12 @@ class SHRaman:
     def coupling(self, u_ft):
         return np.fft.ifft(u_ft * self.kernel_ft).real
 
+    def get_ik(self):
+        return 2j * np.pi / self.p['L'] * np.fft.fftfreq(self.p['N'])\
+             * self.p['N'] 
+
     def spectral_deriv(self, u_ft, order):
-        ik = (2j * np.pi / self.p['L'] * np.fft.fftfreq(self.p['N'])\
-             * self.p['N']) ** order
+        ik = self.get_ik() ** order
         return np.fft.ifft(ik * u_ft ).real
 
     def rhs_shraman(self, t, u):
@@ -108,18 +111,18 @@ class SHRaman:
         return self.tau[i_pos]
 
     def getVelocity(self):
-        xs = np.zeros_like(self.t)
+        self.xs = np.zeros_like(self.t)
         
         jump = 0
         for k in range(len(self.t)):
-            xs[k] = self.getXpos(self.getState(k)) + jump
-            if k > 0: # assuming it only moves to the right!
-                diff = xs[k-1] - xs[k]
+            self.xs[k] = self.getXpos(self.getState(k))
+            if k > 0:
+                diff = self.xs[k-1] - jump - self.xs[k]
                 if abs(diff) > self.p['L'] / 2:
                     jump += self.p['L'] * diff / abs(diff)
-                    xs[k] += jump
+            self.xs[k] += jump
 
-        p, cov = np.polyfit(self.t, xs, 1, cov=True)
+        p, cov = np.polyfit(self.t, self.xs, 1, cov=True)
         v = p[0]
         verr = np.sqrt(cov[0, 0])
 
@@ -129,6 +132,67 @@ class SHRaman:
         eta, mu, gamma = self.p['eta'], self.p['mu'], self.p['gamma']
         if pre is None: pre = self.branchfolder
         return pre + ptoname(eta, mu, gamma) + ext
+
+    def init_cont(self, u0):
+        # for pinning condition
+        self.du0dx = self.spectral_deriv(u0, 1)
+
+        # for jac of spectral deriv
+        ik = self.get_ik()
+
+        # jacobian of spatial derivatives
+        ik_ift = np.fft.ifft(-ik).real
+        self.deriv_du_dx = np.roll(np.append(ik_ift, ik_ift), -1)
+
+        k2 = np.fft.ifft(ik ** 2).real
+        self.deriv_d2u_dx2 = np.roll(np.append(k2, k2), -1)
+
+        k4 = np.fft.ifft(ik ** 4).real
+        self.deriv_d4u_dx4 = np.roll(np.append(k4, k4), -1)
+
+        # for jac of coupling
+        self.deriv_coupling = np.roll(self.kernel()[::-1], 1)
+        
+
+    def cont_rhs(self, X):
+        u, v = X[:-1], X[-1]
+
+        dudx = self.spectral_deriv(np.fft.fft(u), 1)
+        
+        F = self.rhs_shraman(0, u) + v * dudx
+        p = np.trapz(u * self.du0dx, dx=self.p['dx']) 
+
+        return np.append(F, p)
+
+    def getParams(self, params_string):
+        return [self.p[param] for param in params_string.split(' ')]
+
+    def jacobian(self, X):
+        u, v = X[:-1], X[-1]
+
+        mu, alpha, beta, gamma = self.getParams('mu alpha beta gamma')
+        N, dx = self.getParams('N dx')
+        jac = np.zeros((N+1, N+1))
+
+        for i in range(N):
+            jac[i, :] = v * self.deriv_du_dx + alpha * self.deriv_d2u_dx2 \
+                        + beta * self.deriv_d4u_dx4 + gamma * np.roll(self.deriv_coupling, i)
+            jac[i, i] += mu - 3 * u[i] ** 2
+        
+        # deriv pinning w/r to u
+        trapz_factor = np.ones(N)
+        trapz_factor[0] = 0.5
+        trapz_factor[-1] = 0.5
+        
+        jac[N, :] = dx * self.du0dx * trapz_factor
+
+        # deriv F w/r to v
+        jac[:, N] = self.du0dx
+
+        # deriv pinning w/r to v is just zero
+        # so no need to set anything
+
+        return jac
 
 params = {'N': 512, 'dx': 0.5, 'tau1': 3, 'tau2': 10,
           'eta': 0, 'mu': -0.1, 'alpha': -1.0, 'beta': -1.0,
