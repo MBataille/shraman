@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from alive_progress import alive_bar
+from pytest import param
 
 from shraman import SHRaman, DATADIR
 
@@ -12,7 +13,9 @@ def parameterSweep(param_name, param_range, **other_params):
     T_transient = 10
     Tf = 100
 
-    params = {param_name: param_range[0], **other_params}
+    params = {**other_params}
+
+    params[param_name] = param_range[0]
     branch = other_params['branch']
 
     shr = SHRaman(**params)
@@ -21,8 +24,6 @@ def parameterSweep(param_name, param_range, **other_params):
     shr.solve()
 
     last_state = shr.getState(-1)
-    print(last_state.shape)
-    #shr.setInitialCondition(shr.getState(-1))
 
     vs = np.zeros_like(param_range)
     verrs = np.zeros_like(param_range)

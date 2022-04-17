@@ -31,6 +31,9 @@ class SHRaman:
         N, dx = self.p['N'], self.p['dx']
         self.tau = np.linspace(0, N*dx, N, endpoint=False)
         self.kernel_ft = np.fft.fft(self.kernel())
+
+        # For continuation
+        self.switch = False
         
     def kernel(self):
         tau1, tau2, a = self.p['tau1'], self.p['tau2'], self.p['a']
@@ -86,6 +89,21 @@ class SHRaman:
     def saveState(self, k = -1):
         np.save(self.getFilename(), self.getState(k))
 
+    def saveX(self, X, filename=None):
+        if filename is None:
+            filename = self.getFilename(X='X_')
+        else:
+            filename = self.branchfolder + filename + '.npy'
+        np.save(filename, X)
+        return filename
+
+    def loadX(self, filename=None):
+        if filename is None:
+            filename = self.getFilename(X='X_', ext='.npy')
+        else:
+            filename = self.branchfolder + filename + '.npy'
+        return np.load(filename)
+
     def loadState(self, filename):
         return np.load(filename)
 
@@ -128,14 +146,14 @@ class SHRaman:
 
         return v, verr
 
-    def getFilename(self, pre=None, ext=''):
+    def getFilename(self, pre=None, ext='', X=''):
         eta, mu, gamma = self.p['eta'], self.p['mu'], self.p['gamma']
         if pre is None: pre = self.branchfolder
-        return pre + ptoname(eta, mu, gamma) + ext
+        return pre + X + ptoname(eta, mu, gamma) + ext
 
     def init_cont(self, u0):
         # for pinning condition
-        self.du0dx = self.spectral_deriv(u0, 1)
+        self.du0dx = self.spectral_deriv(np.fft.fft(u0), 1)
 
         # for jac of spectral deriv
         ik = self.get_ik()
@@ -153,9 +171,34 @@ class SHRaman:
         # for jac of coupling
         self.deriv_coupling = np.roll(self.kernel()[::-1], 1)
         
+    def setParam(self, pname, pval):
+        self.p[pname] = pval
+
+    def change_switch(self, X):
+        if self.switch: # now v is a param and eta is X[-1]
+            X[-1] = self.switch_off(X[-1])
+        else: # now eta is a param and v is X[-1]
+            X[-1] = self.switch_on(X[-1])
+
+        return X
+
+    def switch_on(self, v):
+        self.switch = True
+        self.setParam('v', v)
+        return self.getParam('eta')
+
+    def switch_off(self, eta):
+        self.switch = False
+        self.setParam('eta', eta)
+        return self.getParam('v')
 
     def cont_rhs(self, X):
-        u, v = X[:-1], X[-1]
+        if self.switch:
+            u, eta = X[:-1], X[-1]
+            self.setParam('eta', eta)
+            v = self.getParam('v')
+        else:
+            u, v = X[:-1], X[-1]
 
         dudx = self.spectral_deriv(np.fft.fft(u), 1)
         
@@ -167,16 +210,26 @@ class SHRaman:
     def getParams(self, params_string):
         return [self.p[param] for param in params_string.split(' ')]
 
+    def getParam(self, pname):
+        return self.p[pname]
+
     def jacobian(self, X):
-        u, v = X[:-1], X[-1]
+        if self.switch:
+            u, eta = X[:-1], X[-1]
+            self.setParam('eta', eta)
+            v = self.getParam('v')
+        else:
+            u, v = X[:-1], X[-1]
 
         mu, alpha, beta, gamma = self.getParams('mu alpha beta gamma')
         N, dx = self.getParams('N dx')
         jac = np.zeros((N+1, N+1))
 
         for i in range(N):
-            jac[i, :] = v * self.deriv_du_dx + alpha * self.deriv_d2u_dx2 \
-                        + beta * self.deriv_d4u_dx4 + gamma * np.roll(self.deriv_coupling, i)
+            j0 = N - 1 - i
+            jf = j0 + N
+            jac[i, :-1] = v * self.deriv_du_dx[j0:jf] + alpha * self.deriv_d2u_dx2[j0:jf] \
+                        + beta * self.deriv_d4u_dx4[j0:jf] + gamma * np.roll(self.deriv_coupling, i)
             jac[i, i] += mu - 3 * u[i] ** 2
         
         # deriv pinning w/r to u
@@ -184,10 +237,13 @@ class SHRaman:
         trapz_factor[0] = 0.5
         trapz_factor[-1] = 0.5
         
-        jac[N, :] = dx * self.du0dx * trapz_factor
+        jac[N, :-1] = dx * self.du0dx * trapz_factor
 
-        # deriv F w/r to v
-        jac[:, N] = self.du0dx
+        # deriv F w/r to v (or eta if switch)
+        if self.switch:
+            jac[:-1, N] = 1
+        else:
+            jac[:-1, N] = self.spectral_deriv(np.fft.fft(u), 1)
 
         # deriv pinning w/r to v is just zero
         # so no need to set anything
