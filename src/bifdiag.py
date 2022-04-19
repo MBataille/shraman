@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from alive_progress import alive_bar
-from pytest import param
 
 from shraman import SHRaman, DATADIR
 

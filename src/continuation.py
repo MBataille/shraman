@@ -1,5 +1,3 @@
-from enum import auto
-from isort import file
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -54,6 +52,8 @@ def advancePALC(X0, ds, t0=None, **other_params):
 
     # estimate tangent?
 
+    SAVE_EVERY = 1000
+
     with alive_bar() as bar:
         while True:
 
@@ -67,11 +67,7 @@ def advancePALC(X0, ds, t0=None, **other_params):
             X0, success = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc)
 
             if not success:
-                print(f'No convergence, try again with smaller step? [y/n]')
-                r = input()
-                if r == 'n': break
-                ds /= 10
-                continue
+                break
 
             fname = shr.saveX(X0, filename=f'x{len(etas)}')
             tname = shr.saveX(t0, filename=f't{len(etas)}')
@@ -81,10 +77,14 @@ def advancePALC(X0, ds, t0=None, **other_params):
             vs.append(X0[-2])
             etas.append(X0[-1])
 
-            df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
-            df.to_csv(shr.branchfolder + f's.csv')
-
             bar()
+
+            if len(etas) % SAVE_EVERY == 0:
+                df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
+                df.to_csv(shr.branchfolder + f's.csv')
+
+    df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
+    df.to_csv(shr.branchfolder + f's.csv')
 
     plt.plot(etas, vs)
     plt.show()
@@ -215,8 +215,7 @@ def parameterSweep(pname, prange, X0, **other_params):
     return vs
 
 if __name__ == '__main__':
-    params['eta'] = 0.2
-    shr = SHRaman(branch = 'ds1', **params)
+    shr = SHRaman(branch = 'ds3', **params)
 
     #u0 = shr.loadState(shr.getFilename(ext='.npy'))
     #v = 3.626771296520384
@@ -228,11 +227,11 @@ if __name__ == '__main__':
 
     X0 = np.append(X, 0.2) # eta = 0.2
     t0 = np.zeros_like(X0)
-    t0[-1] = 1
+    t0[-1] = -1
     
     #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
-    
-    advancePALC(X0, 1e-3, t0=t0, branch='ds3_palc', **params)
+    with threadpool_limits(limits=1):
+        advancePALC(X0, 1e-3, t0=t0, branch='ds3_palc_back', **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 

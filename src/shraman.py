@@ -307,8 +307,8 @@ params = {'N': 512, 'dx': 0.5, 'tau1': 3, 'tau2': 10,
           'gamma': 0.7}
 
 if __name__ == '__main__':
-    params['eta'] = 0.2
-    shr = SHRaman(branch='ds1', **params)
+    #params['eta'] = 0.2
+    shr = SHRaman(branch='dns', **params)
 
     shr.setInitialConditionGaussian()
     shr.solve(T_transient=100, T_f=1000)
