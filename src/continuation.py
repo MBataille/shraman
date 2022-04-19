@@ -1,15 +1,18 @@
 from enum import auto
+from isort import file
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from threadpoolctl import threadpool_limits
 from alive_progress import alive_bar
 
+import numdifftools as nd
+
 from shraman import SHRaman, params
 from bifdiag import getPrange
 
 
-def newton(X0, func, jac, max_steps=100, tol=1e-6):
+def newton(X0, func, jac, max_steps=50, tol=1e-6):
 
     success = False
     for step in range(max_steps):
@@ -28,6 +31,7 @@ def newton(X0, func, jac, max_steps=100, tol=1e-6):
 
         Y = func(X0)
         err = np.abs(Y).sum()
+
         # print(f'.. Step {step}: error = {err}, v = {X0[-1]}')
 
         if err < tol:
@@ -36,6 +40,54 @@ def newton(X0, func, jac, max_steps=100, tol=1e-6):
             break
 
     return X0, success
+
+def advancePALC(X0, ds, t0=None, **other_params):
+
+    params = {**other_params}
+
+    fnames = []
+    tnames = []
+    vs = []
+    etas = []
+
+    shr = SHRaman(**params)
+
+    # estimate tangent?
+
+    with alive_bar() as bar:
+        while True:
+
+            if len(etas) > 0:
+                bar.text(f'eta = {etas[-1]}, v = {vs[-1]}')
+            
+            shr.init_cont(X0[:-2])
+            t0 = shr.get_tangent(X0, prev_tangent=t0)
+            shr.init_palc(ds, t0, X0)
+
+            X0, success = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc)
+
+            if not success:
+                print(f'No convergence, try again with smaller step? [y/n]')
+                r = input()
+                if r == 'n': break
+                ds /= 10
+                continue
+
+            fname = shr.saveX(X0, filename=f'x{len(etas)}')
+            tname = shr.saveX(t0, filename=f't{len(etas)}')
+
+            fnames.append(fname)
+            tnames.append(tname)
+            vs.append(X0[-2])
+            etas.append(X0[-1])
+
+            df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
+            df.to_csv(shr.branchfolder + f's.csv')
+
+            bar()
+
+    plt.plot(etas, vs)
+    plt.show()
 
 def advanceParam(p0, dp, X0, switch=False, auto_switch=False, stopAt=None, **other_params):
 
@@ -163,16 +215,24 @@ def parameterSweep(pname, prange, X0, **other_params):
     return vs
 
 if __name__ == '__main__':
-    params['eta'] = 0.2001
-    shr = SHRaman(branch = 'actest', **params)
+    params['eta'] = 0.2
+    shr = SHRaman(branch = 'ds1', **params)
 
     #u0 = shr.loadState(shr.getFilename(ext='.npy'))
     #v = 3.626771296520384
 
-    X = shr.loadX()
-    print(X[-1])
+    X = shr.loadX('x0')
     
-    advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
+    plt.plot(X[:-1])
+    plt.show()
+
+    X0 = np.append(X, 0.2) # eta = 0.2
+    t0 = np.zeros_like(X0)
+    t0[-1] = 1
+    
+    #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
+    
+    advancePALC(X0, 1e-3, t0=t0, branch='ds3_palc', **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 

@@ -207,6 +207,58 @@ class SHRaman:
 
         return np.append(F, p)
 
+    def init_palc(self, ds, t0, X0):
+        u0 = X0[:-2]
+        self.setParam('eta', X0[-1])
+        self.init_cont(u0)
+
+        self.ds = ds
+        self.tangent = t0
+        self.X0 = X0
+
+    def palc_rhs(self, X):
+        self.setParam('eta', X[-1])
+        F = self.cont_rhs(X[:-1])
+        s = np.dot(self.tangent, (X - self.X0)) - self.ds
+
+        return np.append(F, s)
+
+    def get_tangent(self, X, jacX=None, prev_tangent=None): # the sign may be off
+        N = self.getParam('N')
+
+        if jacX is None:
+            F_x = self.jacobian(X[:-1])
+        else:
+            F_x = jacX
+        F_eta = np.ones(N + 1)
+
+        tx = np.linalg.solve(F_x, -F_eta)
+        t = np.append(tx, 1)
+
+        if prev_tangent is not None:
+            sign = np.dot(t, prev_tangent) # must be +
+            if sign < 0:
+                t = - t
+        
+        return t / np.linalg.norm(t)
+
+
+    def jacobian_palc(self, X, jacX=None):
+        N = self.getParam('N')
+        self.setParam('eta', X[-1])
+        jac = np.zeros((N+2, N+2))
+        
+        if jacX is None:
+            jac[:N+1, :N+1] = self.jacobian(X[:-1])
+        else:
+            jac[:N+1, :N+1] = jacX
+
+        jac[:N, N+1] = 1 # deriv of F w/r to eta    
+        jac[N+1, :] = self.tangent # deriv of PALC w/r to X, eta
+
+        return jac
+
+
     def getParams(self, params_string):
         return [self.p[param] for param in params_string.split(' ')]
 
@@ -255,8 +307,12 @@ params = {'N': 512, 'dx': 0.5, 'tau1': 3, 'tau2': 10,
           'gamma': 0.7}
 
 if __name__ == '__main__':
-    shr = SHRaman(**params)
+    params['eta'] = 0.2
+    shr = SHRaman(branch='ds1', **params)
 
     shr.setInitialConditionGaussian()
-    shr.solve()
-    shr.getVelocity()
+    shr.solve(T_transient=100, T_f=1000)
+    v, _ = shr.getVelocity()
+
+    X = np.append(shr.getState(-1), v)
+    shr.saveX(X, filename='x0')

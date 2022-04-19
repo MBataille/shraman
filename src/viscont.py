@@ -13,7 +13,7 @@ def animateBifDiag(branch):
     etas = df['eta']
     vs = df['v']
     fnames = df['fname']
-    us = [np.load(fname)[:-1] for fname in fnames]
+    us = [np.load(fname)[:-2] for fname in fnames]
 
     N = len(etas)
 
@@ -31,10 +31,10 @@ def animateBifDiag(branch):
         lus.set_ydata(us[i])
         return p, lus
 
-    ani = anim.FuncAnimation(fig, animate, frames=int(len(etas) / fact))
+    ani = anim.FuncAnimation(fig, animate, frames=int(len(etas) / fact), blit=True)
     plt.show()
 
 
 
 if __name__ == '__main__':
-    animateBifDiag('b1')
+    animateBifDiag('ds3_palc')
