@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from threadpoolctl import threadpool_limits
 from alive_progress import alive_bar
+import os
 
 import numdifftools as nd
 
@@ -42,17 +43,26 @@ def newton(X0, func, jac, max_steps=50, tol=1e-6):
 def advancePALC(X0, ds, t0=None, **other_params):
 
     params = {**other_params}
+    N = params['N']
 
-    fnames = []
-    tnames = []
+    # fnames = []
+    # tnames = []
+
     vs = []
     etas = []
+    L2 = []
 
     shr = SHRaman(**params)
 
     # estimate tangent?
 
     SAVE_EVERY = 1000
+    SAVE_FILE_EVERY = 100
+
+    output_file = shr.branchfolder  + 's.csv'
+    iter_count = 0
+    last_save = 0
+    file_count = 0
 
     with alive_bar() as bar:
         while True:
@@ -69,22 +79,31 @@ def advancePALC(X0, ds, t0=None, **other_params):
             if not success:
                 break
 
-            fname = shr.saveX(X0, filename=f'x{len(etas)}')
-            tname = shr.saveX(t0, filename=f't{len(etas)}')
+            if iter_count % SAVE_FILE_EVERY == 0:
+                shr.saveX(X0, filename=f'x{file_count}')
+                file_count += 1
+            # fname = shr.saveX(X0, filename=f'x{len(etas)}')
+            # tname = shr.saveX(t0, filename=f't{len(etas)}')
 
-            fnames.append(fname)
-            tnames.append(tname)
+            # fnames.append(fname)
+            # tnames.append(tname)
+
+            #us.append(X0[:-2])
+            L2.append(np.sum(X0[:-2] ** 2) / N)
             vs.append(X0[-2])
             etas.append(X0[-1])
 
+            iter_count += 1
+
             bar()
 
-            if len(etas) % SAVE_EVERY == 0:
-                df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
-                df.to_csv(shr.branchfolder + f's.csv')
+            if iter_count % SAVE_EVERY == 0:
+                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:]})
+                df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0))
+                last_save = iter_count
 
-    df = pd.DataFrame({'eta': etas, 'v': vs, 'fname': fnames})
-    df.to_csv(shr.branchfolder + f's.csv')
+    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:]})
+    df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0))
 
     plt.plot(etas, vs)
     plt.show()
@@ -231,7 +250,7 @@ if __name__ == '__main__':
     
     #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
     with threadpool_limits(limits=1):
-        advancePALC(X0, 1e-3, t0=t0, branch='ds3_palc_back', **params)
+        advancePALC(X0, 5e-3, t0=t0, branch='ds3_palc_back_', **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 
