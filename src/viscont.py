@@ -35,7 +35,7 @@ def separateBranches(df):
 def animateBifDiag(branch):
     shr = SHRaman(branch=branch, **params)
     
-    df = pd.read_csv(shr.branchfolder + 's.csv')#.iloc[:100000]
+    df = pd.read_csv(shr.branchfolder + 's.csv').iloc[:100000]
 
 
     #print(np.asarray(df.iloc[0]['u']) )
