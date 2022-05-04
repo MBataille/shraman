@@ -1,5 +1,8 @@
+from bitarray import test
 import matplotlib.pyplot as plt
+from more_itertools import last
 import numpy as np
+import scipy.sparse.linalg as spla
 import pandas as pd
 from threadpoolctl import threadpool_limits
 from alive_progress import alive_bar
@@ -11,9 +14,11 @@ from shraman import SHRaman, params
 from bifdiag import getPrange
 
 
-def newton(X0, func, jac, max_steps=50, tol=1e-6):
+def newton(X0, func, jac, max_steps=50, tol=1e-6, test_function=None):
 
     success = False
+    tau = 0
+
     for step in range(max_steps):
 
         if step == 0:
@@ -36,9 +41,19 @@ def newton(X0, func, jac, max_steps=50, tol=1e-6):
         if err < tol:
             # print(f'. Error is smaller than threshold. Finishing Newtons method')
             success = True
+            
+            if test_function is not None:
+                tau = test_function(J)
             break
 
-    return X0, success
+    return X0, success, tau
+
+def test_func_stability(jac):
+    # assuming PALC for SH-raman, one
+    # needs to discard last 2 rows and cols
+    #return spla.eigs(jac[:-2, :-2], k=1, which='LR')[0]
+    w = np.linalg.eigvals(jac[:-2, :-2])
+    return np.amax(w.real)
 
 def advancePALC(X0, ds, t0=None, **other_params):
 
@@ -51,6 +66,7 @@ def advancePALC(X0, ds, t0=None, **other_params):
     vs = []
     etas = []
     L2 = []
+    taus = []
 
     shr = SHRaman(**params)
 
@@ -68,13 +84,13 @@ def advancePALC(X0, ds, t0=None, **other_params):
         while True:
 
             if len(etas) > 0:
-                bar.text(f'eta = {etas[-1]}, v = {vs[-1]}')
+                bar.text(f'eta = {etas[-1]}, L2 = {L2[-1]}, tau = {taus[-1]}')
             
             shr.init_cont(X0[:-2])
             t0 = shr.get_tangent(X0, prev_tangent=t0)
             shr.init_palc(ds, t0, X0)
 
-            X0, success = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc)
+            X0, success, tau = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc, test_function=test_func_stability)
 
             if not success:
                 break
@@ -82,27 +98,25 @@ def advancePALC(X0, ds, t0=None, **other_params):
             if iter_count % SAVE_FILE_EVERY == 0:
                 shr.saveX(X0, filename=f'x{file_count}')
                 file_count += 1
-            # fname = shr.saveX(X0, filename=f'x{len(etas)}')
-            # tname = shr.saveX(t0, filename=f't{len(etas)}')
 
-            # fnames.append(fname)
-            # tnames.append(tname)
-
-            #us.append(X0[:-2])
             L2.append(np.sum(X0[:-2] ** 2) / N)
             vs.append(X0[-2])
             etas.append(X0[-1])
+            taus.append(tau)
+
+            if len(taus) > 1 and taus[-1] * taus[-2] < 0:
+                print(f'Bifurcation point (stability change) between eta = {etas[-1]} and {etas[-2]}')
 
             iter_count += 1
 
             bar()
 
             if iter_count % SAVE_EVERY == 0:
-                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:]})
+                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
                 df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0))
                 last_save = iter_count
 
-    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:]})
+    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
     df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0))
 
     plt.plot(etas, vs)
@@ -133,7 +147,7 @@ def advanceParam(p0, dp, X0, switch=False, auto_switch=False, stopAt=None, **oth
             if len(etas) > 0:
                 bar.text(f'eta = {etas[-1]}, v = {vs[-1]}')
             shr.init_cont(X0[:-1])
-            X0, success = newton(X0, shr.cont_rhs, shr.jacobian)
+            X0, success = newton(X0, shr.cont_rhs, shr.jacobian, test_function=test_func_stability)
 
             if stopAt is not None and len(etas) > 0:
                 if eval(str(etas[-1]) + stopAt): break
@@ -234,7 +248,7 @@ def parameterSweep(pname, prange, X0, **other_params):
     return vs
 
 if __name__ == '__main__':
-    shr = SHRaman(branch = 'ds3', **params)
+    shr = SHRaman(branch = 'pattern_tmp', **params)
 
     #u0 = shr.loadState(shr.getFilename(ext='.npy'))
     #v = 3.626771296520384
@@ -244,13 +258,17 @@ if __name__ == '__main__':
     plt.plot(X[:-1])
     plt.show()
 
-    X0 = np.append(X, 0.2) # eta = 0.2
+    #X0 = np.append(X, 0.25) # eta = 0.2
+    X0 = X
     t0 = np.zeros_like(X0)
-    t0[-1] = -1
+    t0[-1] = 1
+
+    params['gamma'] = 0.12
+
     
     #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
     with threadpool_limits(limits=1):
-        advancePALC(X0, 5e-3, t0=t0, branch='ds3_palc_back_', **params)
+        advancePALC(X0, 5e-3, t0=t0, branch='pattern_gamma=0.12', **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 
