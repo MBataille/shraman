@@ -7,10 +7,10 @@ from shraman import SHRaman, DATADIR
 
 import sys
 
-def parameterSweep(param_name, param_range, **other_params):
+def parameterSweep(param_name, param_range, initcond=None, **other_params):
 
-    T_transient = 10
-    Tf = 100
+    T_transient = 200
+    Tf = 1200
 
     params = {**other_params}
 
@@ -19,10 +19,16 @@ def parameterSweep(param_name, param_range, **other_params):
 
     shr = SHRaman(**params)
 
-    shr.setInitialConditionGaussian()
-    shr.solve()
+    if initcond is None:
+        shr.setInitialConditionGaussian()
+        shr.solve()
 
-    last_state = shr.getState(-1)
+        last_state = shr.getState(-1)
+    else:
+        last_state = initcond
+
+    plt.plot(last_state)
+    plt.show()
 
     vs = np.zeros_like(param_range)
     verrs = np.zeros_like(param_range)
@@ -37,7 +43,13 @@ def parameterSweep(param_name, param_range, **other_params):
             shr.solve(T_transient=T_transient, T_f=Tf)
             shr.saveState()
 
+            last_state = shr.getState(-1)
+
             vs[i], verrs[i] = shr.getVelocity()
+
+            if i == 0:
+                shr.saveX(np.append(last_state, vs[i]), 'bs1')
+            
             # print(f'Velocity for {param_name} = {param_val} is {vs[i]}')
             bar()
 
@@ -54,10 +66,10 @@ def getPrange(p0, pf, dp):
 
 if __name__ == '__main__':
 
-    branch = 'm1'
-    pname = 'mu'
-    p0 = -0.05
-    pf = -0.5
+    branch = 'gsimple2'
+    pname = 'gamma'
+    p0 = 0.2
+    pf =  0.01
     dp = 0.001
     # branch = sys.argv[1]
     # pname = sys.argv[2]
@@ -71,6 +83,10 @@ if __name__ == '__main__':
 
     prange = getPrange(p0, pf, dp)
 
+    params['gamma'] = p0
+    sh = SHRaman(branch='gsimple', **params)
+    u0 = sh.loadState(sh.getFilename(ext='.npy'))
+
     print(f'Parameter sweep of {pname} from {prange[0]} to {prange[-1]} with {len(prange)} points.')
-    parameterSweep(pname, prange, branch=branch, **params)
+    parameterSweep(pname, prange, initcond=u0, branch=branch, **params)
 

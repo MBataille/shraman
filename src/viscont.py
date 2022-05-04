@@ -6,6 +6,27 @@ import os
 
 from shraman import SHRaman, params
 
+
+def getrealRoot(roots):
+    reals = []
+    for r in roots:
+        if r.imag == 0:
+            reals.append(roots.real)
+    if len(reals) != 1:
+        print(roots, reals)
+    return reals[0]
+
+def getHSS(params, etas):
+    us = np.zeros_like(etas)
+
+    mu = params['mu']
+    gamma = 0.12
+
+    for i, eta in enumerate(etas):
+        us[i] = getrealRoot(np.roots([-1, 0, mu, gamma + eta]))[0]
+    
+    return us
+
 def animateBifDiag(branch):
     shr = SHRaman(branch=branch, **params)
     
@@ -15,7 +36,7 @@ def animateBifDiag(branch):
 
     etas = df['eta']
     vs = df['v']
-    L2 = df['L2']
+    L2 = df['L2']#np.sqrt(df['L2'])
     us = []
     i = 0
     while True:
@@ -53,9 +74,22 @@ def animateBifDiag(branch):
         txt.set_text(f'i = {j * fact}')
         return p1, p2, lus, txt
 
-    ani = anim.FuncAnimation(fig, animate, frames=int(len(etas) / fact), blit=True)
-    # writervideo = anim.FFMpegWriter(fps=20) 
-    # ani.save(f'{branch}.mp4', writer=writervideo)
+    ax1.set_ylabel('v')
+    ax1.set_xlabel('eta')
+    ax2.set_ylabel('L2')
+    ax2.set_xlabel('eta')
+    ax3.set_ylabel('u')
+    ax3.set_xlabel('x')
+    #frames = 1000
+    frames = int(len(etas) / fact)
+    
+    etashss = np.linspace(-1, 1, 1001)
+    ax2.plot(etashss, getHSS(params, etashss), color='tab:orange')
+
+    
+    ani = anim.FuncAnimation(fig, animate, frames=frames, blit=True)
+    #writervideo = anim.FFMpegFileWriter(fps=15) 
+    #ani.save(f'{branch}a.mp4', writer=writervideo)
     #plt.clf()
     plt.show()
 
@@ -63,4 +97,4 @@ def animateBifDiag(branch):
 
 if __name__ == '__main__':
     #for branch in ['bs1_palc_back', 'bs1_palc_forw', 'ds3_palc_back', 'ds3_palc_forw']:
-    animateBifDiag('ds3_palc_back_')
+    animateBifDiag('bs1_g02')

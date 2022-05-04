@@ -12,23 +12,30 @@ def readParameterSweep(branch, pname):
     vs = df['v']
     verrs = df['verr']
 
-    for pval in prange[::10]:
+    L2 = []
+    for pval in prange:
+        params[pname] = pval
+        sh = SHRaman(branch=branch, **params)
+        u = sh.loadState(sh.getFilename(ext='.npy'))
+        L2.append(np.sum(u ** 2) / len(u))
+
+    for pval in prange[-20:-10]:
         params[pname] = pval
         sh = SHRaman(branch=branch, **params)
         u = sh.loadState(sh.getFilename(ext='.npy'))
         u = sh.center(u)
 
-        plt.plot(u, label=f'{pname} = {pval}')
+        plt.plot(u, label=f'{pname} = {round(pval, 3)}')
     # plt.title()
     plt.legend()
     plt.show()
 
-    plt.errorbar(prange, vs, verrs)
+    plt.plot(prange, L2)
     plt.show()
     print(verrs)
 
-    plt.semilogy(prange, vs)
-    plt.show()
-    print(verrs)
+    # plt.semilogy(prange, vs)
+    # plt.show()
+    # print(verrs)
 
-readParameterSweep('gtest', 'gamma')
+readParameterSweep('gsimple', 'gamma')

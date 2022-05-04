@@ -76,6 +76,10 @@ def advancePALC(X0, ds, t0=None, **other_params):
 
             X0, success = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc)
 
+            if iter_count == 0:
+                plt.plot(X0[:-2])
+                plt.show()
+
             if not success:
                 break
 
@@ -234,23 +238,26 @@ def parameterSweep(pname, prange, X0, **other_params):
     return vs
 
 if __name__ == '__main__':
-    shr = SHRaman(branch = 'ds3', **params)
+    shr = SHRaman(branch = 'gsimple2', **params)
 
     #u0 = shr.loadState(shr.getFilename(ext='.npy'))
     #v = 3.626771296520384
 
-    X = shr.loadX('x0')
+    X = shr.loadX('bs1')
     
     plt.plot(X[:-1])
     plt.show()
 
-    X0 = np.append(X, 0.2) # eta = 0.2
+    print(X[-1])
+
+    params['gamma'] = 0.20
+    X0 = np.append(X, 0.0) # eta = 0.0
     t0 = np.zeros_like(X0)
-    t0[-1] = -1
+    t0[-1] = 1 # move forward
     
     #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
     with threadpool_limits(limits=1):
-        advancePALC(X0, 5e-3, t0=t0, branch='ds3_palc_back_', **params)
+        advancePALC(X0, 1e-3, t0=t0, branch='bs1_g02', **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 
