@@ -1,3 +1,4 @@
+import wave
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
@@ -59,10 +60,6 @@ class SHRaman:
         
         return eta + mu * u - u ** 3 + alpha * d2u + beta * d4u + gamma * self.coupling(u_ft)
 
-    def setInitialConditionGaussian(self):
-        L = self.p['L']
-        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2 
-
     def solve(self, T_transient=0, T_f=100):
         Tf = T_f
         dt = 0.1
@@ -79,12 +76,6 @@ class SHRaman:
 
     def getState(self, k):
         return self.sol[:, k]
-    
-    def save(self):
-        pass
-
-    def saveOP(self):
-        pass
 
     def saveState(self, k = -1):
         np.save(self.getFilename(), self.getState(k))
@@ -112,6 +103,15 @@ class SHRaman:
 
     def setInitialCondition(self, u0):
         self.u0 = u0
+
+    def setInitialConditionGaussian(self):
+        L = self.p['L']
+        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2 
+
+    def setInitialConditionPattern(self, wavelength=None):
+        if wavelength is None: wavelength = self.p['L'] / 6
+        k = 2 * np.pi / wavelength
+        self.u0 = np.sin(k * self.tau)
 
     def center(self, u):
         xpos = self.getXpos(u, index=True)
@@ -230,7 +230,7 @@ class SHRaman:
             F_x = self.jacobian(X[:-1])
         else:
             F_x = jacX
-        F_eta = np.ones(N + 1)
+        F_eta = np.ones(N + 1) # deriv of F w/r to eta
 
         tx = np.linalg.solve(F_x, -F_eta)
         t = np.append(tx, 1)
@@ -257,7 +257,6 @@ class SHRaman:
         jac[N+1, :] = self.tangent # deriv of PALC w/r to X, eta
 
         return jac
-
 
     def getParams(self, params_string):
         return [self.p[param] for param in params_string.split(' ')]
