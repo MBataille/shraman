@@ -92,6 +92,10 @@ def advancePALC(X0, ds, t0=None, **other_params):
 
             X0, success, tau = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc, test_function=test_func_stability)
 
+            if iter_count == 0:
+                plt.plot(X0[:-2])
+                plt.show()
+
             if not success:
                 break
 
@@ -253,7 +257,7 @@ if __name__ == '__main__':
     #u0 = shr.loadState(shr.getFilename(ext='.npy'))
     #v = 3.626771296520384
 
-    X = shr.loadX('x0')
+    X = shr.loadX('bs1')
     
     plt.plot(X[:-1])
     plt.show()
