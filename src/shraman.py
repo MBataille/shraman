@@ -1,3 +1,4 @@
+import wave
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
@@ -88,12 +89,6 @@ class SHRaman:
 
     def getState(self, k):
         return self.sol[:, k]
-    
-    def save(self):
-        pass
-
-    def saveOP(self):
-        pass
 
     def saveState(self, k = -1):
         np.save(self.getFilename(), self.getState(k))
@@ -121,6 +116,15 @@ class SHRaman:
 
     def setInitialCondition(self, u0):
         self.u0 = u0
+
+    def setInitialConditionGaussian(self):
+        L = self.p['L']
+        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2 
+
+    def setInitialConditionPattern(self, wavelength=None):
+        if wavelength is None: wavelength = self.p['L'] / 6
+        k = 2 * np.pi / wavelength
+        self.u0 = np.sin(k * self.tau)
 
     def center(self, u):
         xpos = self.getXpos(u, index=True)
@@ -280,7 +284,6 @@ class SHRaman:
         jac[Np1, :] = self.tangent # deriv of PALC w/r to X, eta
 
         return jac
-
 
     def getParams(self, params_string):
         return [self.p[param] for param in params_string.split(' ')]
