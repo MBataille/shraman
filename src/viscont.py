@@ -1,54 +1,58 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import matplotlib.animation as anim
 import pandas as pd
 import os
 
 from shraman import SHRaman, params
 
+GAMMA = 0.12
+
 def separateBranches(df):
     etas = df['eta']
     L2 = df['L2']
     tau = df['tau']
 
-    cs_pts = df[tau * np.roll(tau, 1) < 0].index[1:]
+    cs_pts = df[tau * np.roll(tau, 1) < 0].index
+
+    print(cs_pts)
+
+    if len(cs_pts) == 0:
+        line = '-' if tau.iloc[1] < 0 else '--'
+        return [df], [line]
+
 
     branches = []
     stability = []
     line = ''
 
-    for i in range(len(cs_pts)-1):
-        start = cs_pts[i]
-        end = cs_pts[i+1]
-        branches.append(df.loc[start:end])
-        if tau.loc[start+1] < 0: # stable
+    for i in range(len(cs_pts) + 1):
+        start = 0 if i == 0 else cs_pts[i-1]
+        end = -1 if i == len(cs_pts) else cs_pts[i]
+        branches.append(df.iloc[start:end])
+        if tau.iloc[start+1] < 0: # stable
             line = '-'
         else:
             line = '--'
         stability.append(line)
-    last = cs_pts[-1]
-    branches.append(df.loc[last:])
-    line = '-' if tau.loc[last+1] < 0 else '--'
-    stability.append(line)
+
+    print(stability)
     return branches, stability
 
-def getrealRoot(roots):
-    reals = []
-    for r in roots:
-        if r.imag == 0:
-            reals.append(roots.real)
-    if len(reals) != 1:
-        print(roots, reals)
-    return reals[0]
 
-def getHSS(params, etas):
+def getHSS(etas):
     us = np.zeros_like(etas)
 
-    mu = params['mu']
-    gamma = 0.12
+    mu = -0.1
+    gamma = GAMMA
 
     for i, eta in enumerate(etas):
-        us[i] = getrealRoot(np.roots([-1, 0, mu, gamma + eta]))[0]
+        roots = np.roots([-1, 0, mu, eta + gamma])
+        for root in roots:
+            if root.imag == 0:
+                us[i] = root.real
+                break
     
     return us
 
@@ -62,13 +66,17 @@ def animateBifDiag(branch):
 
     etas = df['eta']
     vs = df['v']
-    L2 = df['L2']#np.sqrt(df['L2'])
+    #df['L2'] = np.sqrt(df['L2']) 
+
+    L2 = df['L2']
     us = []
     i = 0
     while True:
         fname = shr.branchfolder + f'x{i}.npy'
         if not os.path.exists(fname): break
-        us.append(np.load(fname))
+        u = np.load(fname)
+        #us.append(np.append(shr.center(u[:-2]), u[-2:]))
+        us.append(u)
         i += 1
     # fnames = df['fname']
     #us = np.array([np.load(fname)[:-2] for fname in fnames])
@@ -96,6 +104,7 @@ def animateBifDiag(branch):
     p2, = ax2.plot(etas[0:1], L2[0:1], 'ok')
     lus, = ax3.plot(us[0][:-2])
     txt = ax3.text(0.1, 0.1, '', transform=ax3.transAxes)
+    ax3.set_ylim(-1.3, 1.3)
 
     fact = 100
 
@@ -117,8 +126,8 @@ def animateBifDiag(branch):
     #frames = 1000
     frames = int(len(etas) / fact)
     
-    etashss = np.linspace(-1, 1, 1001)
-    ax2.plot(etashss, getHSS(params, etashss), color='tab:orange')
+    etashss = np.linspace(-1., 1., 1001)
+    ax2.plot(etashss, getHSS(etashss) ** 2, color='tab:orange')
 
     
     ani = anim.FuncAnimation(fig, animate, frames=frames, blit=True)
@@ -127,8 +136,50 @@ def animateBifDiag(branch):
     #plt.clf()
     plt.show()
 
+def plotBifDiags(*branches):
 
+    fig, (ax1, ax2) = plt.subplots(2)
+
+    COLORS = list(mcolors.TABLEAU_COLORS)
+
+    for k, branch in enumerate(branches):
+        shr = SHRaman(branch=branch, **params)
+        df = pd.read_csv(shr.branchfolder + 's.csv')
+        # df['L2'] = np.sqrt(df['L2'])
+
+        curves, stab = separateBranches(df)
+
+        for i in range(len(curves)):
+            c = curves[i]
+            line = stab[i]
+
+            if i == 0:
+                label = branch.split('_')[0]
+            else:
+                label = None
+
+            ax1.plot(c['eta'], c['v'], line, color=COLORS[k], label=label)
+            ax2.plot(c['eta'], c['L2'], line, color=COLORS[k], label=label)
+
+    ax1.set_ylabel('v')
+    ax1.set_xlabel('eta')
+    ax2.set_ylabel('L2')
+    ax2.set_xlabel('eta')
+
+    plt.legend()
+
+    #etashss = np.linspace(-1., 1., 1001)
+    #ax2.plot(etashss, getHSS(etashss) ** 2, color='tab:orange')   
+
+    plt.show()
+     
+GAMMA = 0.12
 
 if __name__ == '__main__':
     #for branch in ['bs1_palc_back', 'bs1_palc_forw', 'ds3_palc_back', 'ds3_palc_forw']:
-    animateBifDiag('bs1_gamma=0.13')
+
+    branches = (f'hss_gamma={GAMMA}', f'bs1_gamma={GAMMA}', f'pattern_gamma={GAMMA}')
+
+    #animateBifDiag('hss_gamma=0.12')
+    #plotBifDiags('hss_gamma=0.12')
+    plotBifDiags(*branches)

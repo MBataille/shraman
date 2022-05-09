@@ -55,7 +55,7 @@ def test_func_stability(jac):
     w = np.linalg.eigvals(jac[:-2, :-2])
     return np.amax(w.real)
 
-def advancePALC(X0, ds, t0=None, **other_params):
+def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
 
     params = {**other_params}
     N = params['N']
@@ -69,6 +69,8 @@ def advancePALC(X0, ds, t0=None, **other_params):
     taus = []
 
     shr = SHRaman(**params)
+    if motionless:
+        shr.motionless = True
 
     # estimate tangent?
 
@@ -86,7 +88,11 @@ def advancePALC(X0, ds, t0=None, **other_params):
             if len(etas) > 0:
                 bar.text(f'eta = {etas[-1]}, L2 = {L2[-1]}, tau = {taus[-1]}')
             
-            shr.init_cont(X0[:-2])
+            if motionless:
+                shr.init_cont(X0[:-1])
+            else:
+                shr.init_cont(X0[:-2])
+
             t0 = shr.get_tangent(X0, prev_tangent=t0)
             shr.init_palc(ds, t0, X0)
 
@@ -117,11 +123,11 @@ def advancePALC(X0, ds, t0=None, **other_params):
 
             if iter_count % SAVE_EVERY == 0:
                 df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
-                df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0))
+                df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0), index=False)
                 last_save = iter_count
 
     df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
-    df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0))
+    df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0), index=False)
 
     plt.plot(etas, vs)
     plt.show()
@@ -252,27 +258,26 @@ def parameterSweep(pname, prange, X0, **other_params):
     return vs
 
 if __name__ == '__main__':
-    shr = SHRaman(branch = 'pattern_tmp', **params)
-
-    #u0 = shr.loadState(shr.getFilename(ext='.npy'))
-    #v = 3.626771296520384
-
-    X = shr.loadX('bs1')
-    
-    plt.plot(X[:-1])
-    plt.show()
-
-    #X0 = np.append(X, 0.25) # eta = 0.2
-    X0 = X
-    t0 = np.zeros_like(X0)
-    t0[-1] = 1
 
     params['gamma'] = 0.12
+    params['eta'] = -2.0
+    shr = SHRaman(branch = 'hss_gamma=0.12', **params)
 
+    X = np.zeros(params['N']) +  shr.getHSS()
+
+    # X = shr.loadX('x0')
+    
+    plt.plot(X)
+    # plt.show()
+
+    X0 = np.append(X, params['eta']) # append eta
+    # X0 = X
+    t0 = np.zeros_like(X0)
+    t0[-1] = 1
     
     #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
     with threadpool_limits(limits=1):
-        advancePALC(X0, 5e-3, t0=t0, branch='pattern_gamma=0.12', **params)
+        advancePALC(X0, 1e-2, t0=t0, branch='hss_gamma=0.12', motionless=True, **params)
     # etas = getPrange(0, 0.3, 0.02)
     # vs = parameterSweep('eta', etas, X, branch='ptest', **params)
 

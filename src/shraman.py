@@ -34,6 +34,7 @@ class SHRaman:
 
         # For continuation
         self.switch = False
+        self.motionless = False
         
     def kernel(self):
         tau1, tau2, a = self.p['tau1'], self.p['tau2'], self.p['a']
@@ -61,7 +62,15 @@ class SHRaman:
 
     def setInitialConditionGaussian(self):
         L = self.p['L']
-        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2 
+        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2
+
+    def getHSS(self):
+        mu, eta, gamma = self.getParams('mu eta gamma')
+
+        # solve cubic eq and return real root
+        for root in np.roots([-1, 0, mu, eta + gamma]):
+            if root.imag == 0:
+                return root.real
 
     def solve(self, T_transient=0, T_f=100):
         Tf = T_f
@@ -193,6 +202,9 @@ class SHRaman:
         return self.getParam('v')
 
     def cont_rhs(self, X):
+        if self.motionless:
+            return self.rhs_shraman(0, X)
+
         if self.switch:
             u, eta = X[:-1], X[-1]
             self.setParam('eta', eta)
@@ -207,8 +219,13 @@ class SHRaman:
 
         return np.append(F, p)
 
+
     def init_palc(self, ds, t0, X0):
-        u0 = X0[:-2]
+        if self.motionless:
+            u0 = X0[:-1]
+        else:
+            u0 = X0[:-2]
+        
         self.setParam('eta', X0[-1])
         self.init_cont(u0)
 
@@ -230,7 +247,10 @@ class SHRaman:
             F_x = self.jacobian(X[:-1])
         else:
             F_x = jacX
-        F_eta = np.ones(N + 1)
+        if self.motionless:
+            F_eta = np.ones(N)
+        else:
+            F_eta = np.ones(N+1)
 
         tx = np.linalg.solve(F_x, -F_eta)
         t = np.append(tx, 1)
@@ -246,15 +266,18 @@ class SHRaman:
     def jacobian_palc(self, X, jacX=None):
         N = self.getParam('N')
         self.setParam('eta', X[-1])
-        jac = np.zeros((N+2, N+2))
+
+        Np1 = N if self.motionless else N+1
+
+        jac = np.zeros((Np1+1, Np1+1))
         
         if jacX is None:
-            jac[:N+1, :N+1] = self.jacobian(X[:-1])
+            jac[:Np1, :Np1] = self.jacobian(X[:-1])
         else:
-            jac[:N+1, :N+1] = jacX
+            jac[:Np1, :Np1] = jacX
 
-        jac[:N, N+1] = 1 # deriv of F w/r to eta    
-        jac[N+1, :] = self.tangent # deriv of PALC w/r to X, eta
+        jac[:N, Np1] = 1 # deriv of F w/r to eta    
+        jac[Np1, :] = self.tangent # deriv of PALC w/r to X, eta
 
         return jac
 
@@ -266,7 +289,10 @@ class SHRaman:
         return self.p[pname]
 
     def jacobian(self, X):
-        if self.switch:
+        if self.motionless:
+            u = X
+            v = 0
+        elif self.switch:
             u, eta = X[:-1], X[-1]
             self.setParam('eta', eta)
             v = self.getParam('v')
@@ -275,15 +301,19 @@ class SHRaman:
 
         mu, alpha, beta, gamma = self.getParams('mu alpha beta gamma')
         N, dx = self.getParams('N dx')
-        jac = np.zeros((N+1, N+1))
+        if self.motionless:
+            jac = np.zeros((N, N))
+        else:
+            jac = np.zeros((N+1, N+1))
 
         for i in range(N):
             j0 = N - 1 - i
             jf = j0 + N
-            jac[i, :-1] = v * self.deriv_du_dx[j0:jf] + alpha * self.deriv_d2u_dx2[j0:jf] \
+            jac[i, :N] = v * self.deriv_du_dx[j0:jf] + alpha * self.deriv_d2u_dx2[j0:jf] \
                         + beta * self.deriv_d4u_dx4[j0:jf] + gamma * np.roll(self.deriv_coupling, i)
             jac[i, i] += mu - 3 * u[i] ** 2
         
+        if self.motionless: return jac
         # deriv pinning w/r to u
         trapz_factor = np.ones(N)
         trapz_factor[0] = 0.5
