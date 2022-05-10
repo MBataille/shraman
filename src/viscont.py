@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.animation as anim
 import pandas as pd
+import time
 import os
 
-from shraman import SHRaman, params
+from .shraman import SHRaman, params
 
 GAMMA = 0.12
 
@@ -56,8 +57,8 @@ def getHSS(etas):
     
     return us
 
-def animateBifDiag(branch):
-    shr = SHRaman(branch=branch, **params)
+def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
+    shr = SHRaman(branch=branch, **other_params)
     
     df = pd.read_csv(shr.branchfolder + 's.csv').iloc[:100000]
 
@@ -97,8 +98,12 @@ def animateBifDiag(branch):
         b = branches[i]
         line = stability[i]
 
-        ax1.plot(b['eta'], b['v'], line, color='tab:blue')
-        ax2.plot(b['eta'], b['L2'], line, color='tab:blue')
+        if colors is None:
+            color = 'tab:blue'
+        else:
+            color = colors[0]
+        ax1.plot(b['eta'], b['v'], line, color=color)
+        ax2.plot(b['eta'], b['L2'], line, color=color)
 
     p1, = ax1.plot(etas[0:1], vs[0:1], 'ok')
     p2, = ax2.plot(etas[0:1], L2[0:1], 'ok')
@@ -115,6 +120,7 @@ def animateBifDiag(branch):
         p2.set_data([eta], [L2[j * fact]])
         lus.set_ydata(us[j][:-2])
         txt.set_text(f'i = {j * fact}')
+        time.sleep(0.2)
         return p1, p2, lus, txt
 
     ax1.set_ylabel('v')
@@ -126,8 +132,20 @@ def animateBifDiag(branch):
     #frames = 1000
     frames = int(len(etas) / fact)
     
-    etashss = np.linspace(-1., 1., 1001)
-    ax2.plot(etashss, getHSS(etashss) ** 2, color='tab:orange')
+    if branches_ref is None:
+        etashss = np.linspace(-1., 1., 1001)
+        u_hss = shr.getHSS(etashss)
+        L2_hss = [shr.L2norm(np.array([u])) for u in u_hss]
+        ax2.plot(etashss, L2_hss, color='tab:orange')
+    else:
+        for i, br in enumerate(branches_ref):
+            if colors is None:
+                color = 'tab:orange'
+            else:
+                color = colors[i+1]
+            shr_ref = SHRaman(branch=br, **params)
+            df_ref = pd.read_csv(shr_ref.branchfolder + 's.csv')
+            ax2.plot(df_ref['eta'], df_ref['L2'], color=color)
 
     
     ani = anim.FuncAnimation(fig, animate, frames=frames, blit=True)
@@ -136,34 +154,47 @@ def animateBifDiag(branch):
     #plt.clf()
     plt.show()
 
-def plotBifDiags(*branches):
+def plotBifDiags(*branches,  **other_params):
 
     fig, (ax1, ax2) = plt.subplots(2)
 
     COLORS = list(mcolors.TABLEAU_COLORS)
 
+    _params = {**params}
+    for p in other_params:
+        _params[p] = other_params[p]
+
     for k, branch in enumerate(branches):
-        shr = SHRaman(branch=branch, **params)
-        df = pd.read_csv(shr.branchfolder + 's.csv')
-        # df['L2'] = np.sqrt(df['L2'])
 
-        curves, stab = separateBranches(df)
+        if type(branch) != tuple:
+            branch = (branch, )
 
-        for i in range(len(curves)):
-            c = curves[i]
-            line = stab[i]
+        for br in branch:
 
-            if i == 0:
-                label = branch.split('_')[0]
-            else:
-                label = None
+            shr = SHRaman(branch=br, **params)
 
-            ax1.plot(c['eta'], c['v'], line, color=COLORS[k], label=label)
-            ax2.plot(c['eta'], c['L2'], line, color=COLORS[k], label=label)
+            df = pd.read_csv(shr.branchfolder + 's.csv')
+            # df['L2'] = np.sqrt(df['L2'])
+
+            curves, stab = separateBranches(df)
+
+            for i in range(len(curves)):
+                c = curves[i]
+                line = stab[i]
+
+                if i == 0:
+                    label = br.split('_')[0]
+                else:
+                    label = None
+
+                if br[:3] != 'hss': # homogeneous solutions do not have velocity
+                    ax1.plot(c['eta'], c['v'], line, color=COLORS[k], label=label)
+                ax2.plot(c['eta'], c['L2'], line, color=COLORS[k], label=label)
+
 
     ax1.set_ylabel('v')
     ax1.set_xlabel('eta')
-    ax2.set_ylabel('L2')
+    ax2.set_ylabel('L2*')
     ax2.set_xlabel('eta')
 
     plt.legend()

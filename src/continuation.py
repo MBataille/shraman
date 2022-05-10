@@ -1,17 +1,14 @@
-from bitarray import test
 import matplotlib.pyplot as plt
-from more_itertools import last
 import numpy as np
 import scipy.sparse.linalg as spla
 import pandas as pd
 from threadpoolctl import threadpool_limits
 from alive_progress import alive_bar
-import os
 
 import numdifftools as nd
 
-from shraman import SHRaman, params
-from bifdiag import getPrange
+from .shraman import SHRaman, params
+from .bifdiag import getPrange
 
 
 def newton(X0, func, jac, max_steps=50, tol=1e-6, test_function=None):
@@ -57,8 +54,8 @@ def test_func_stability(jac):
 
 def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
 
-    params = {**other_params}
-    N = params['N']
+    _params = {**other_params}
+    N = _params['N']
 
     # fnames = []
     # tnames = []
@@ -67,8 +64,10 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
     etas = []
     L2 = []
     taus = []
+    branches = []
+    stability = []
 
-    shr = SHRaman(**params)
+    shr = SHRaman(**_params)
     if motionless:
         shr.motionless = True
 
@@ -81,6 +80,7 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
     iter_count = 0
     last_save = 0
     file_count = 0
+    branch_count = 0
 
     with alive_bar() as bar:
         while True:
@@ -109,24 +109,27 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
                 shr.saveX(X0, filename=f'x{file_count}')
                 file_count += 1
 
-            L2.append(np.sum(X0[:-2] ** 2) / N)
+            L2.append(shr.L2norm(X0[:N]))
             vs.append(X0[-2])
             etas.append(X0[-1])
             taus.append(tau)
+            stability.append('stable' if tau < 0 else 'unstable')
+            branches.append(branch_count)
 
             if len(taus) > 1 and taus[-1] * taus[-2] < 0:
                 print(f'Bifurcation point (stability change) between eta = {etas[-1]} and {etas[-2]}')
+                branch_count += 1
 
             iter_count += 1
 
             bar()
 
             if iter_count % SAVE_EVERY == 0:
-                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
+                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
                 df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0), index=False)
                 last_save = iter_count
 
-    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:]})
+    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
     df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0), index=False)
 
     plt.plot(etas, vs)

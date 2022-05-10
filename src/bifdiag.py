@@ -3,14 +3,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from alive_progress import alive_bar
 
-from shraman import SHRaman, DATADIR
+from .shraman import SHRaman, DATADIR
 
 import sys
 
 def parameterSweep(param_name, param_range, initcond=None, **other_params):
 
     T_transient = 200
-    Tf = 1200
+    Tf = 400
 
     params = {**other_params}
 
@@ -48,6 +48,8 @@ def parameterSweep(param_name, param_range, initcond=None, **other_params):
             vs[i], verrs[i] = shr.getVelocity()
 
             if i == 0:
+                plt.plot(last_state)
+                plt.show()
                 shr.saveX(np.append(last_state, vs[i]), 'bs1')
             
             # print(f'Velocity for {param_name} = {param_val} is {vs[i]}')

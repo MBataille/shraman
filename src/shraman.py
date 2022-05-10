@@ -1,4 +1,3 @@
-import wave
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
@@ -29,7 +28,7 @@ class SHRaman:
                 os.mkdir(self.branchfolder)
 
         # Initialize FFT of Coupling kernel
-        N, dx = self.p['N'], self.p['dx']
+        N, dx = self.getParams('N dx')
         self.tau = np.linspace(0, N*dx, N, endpoint=False)
         self.kernel_ft = np.fft.fft(self.kernel())
 
@@ -38,11 +37,11 @@ class SHRaman:
         self.motionless = False
         
     def kernel(self):
-        tau1, tau2, a = self.p['tau1'], self.p['tau2'], self.p['a']
+        tau1, tau2, a = self.getParams('tau1 tau2 a')
         return a * np.exp(-self.tau / tau2) * np.sin(self.tau / tau1)
 
     def coupling(self, u_ft):
-        return np.fft.ifft(u_ft * self.kernel_ft).real
+        return np.fft.ifft(u_ft * self.kernel_ft).real * self.p['dx']
 
     def get_ik(self):
         return 2j * np.pi / self.p['L'] * np.fft.fftfreq(self.p['N'])\
@@ -52,8 +51,13 @@ class SHRaman:
         ik = self.get_ik() ** order
         return np.fft.ifft(ik * u_ft ).real
 
+    def L2norm(self, u, ref=2):
+        if type(u) == float:
+            u = np.array([u])
+        return np.sqrt(np.sum((u + ref) ** 2)) / len(u)
+
     def rhs_shraman(self, t, u):
-        eta, mu, alpha, beta, gamma = self.p['eta'], self.p['mu'], self.p['alpha'], self.p['beta'], self.p['gamma']
+        eta, mu, alpha, beta, gamma = self.getParams('eta mu alpha beta gamma')
 
         u_ft = np.fft.fft(u)
         d2u = self.spectral_deriv(u_ft, 2)
@@ -65,13 +69,22 @@ class SHRaman:
         L = self.p['L']
         self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2
 
-    def getHSS(self):
-        mu, eta, gamma = self.getParams('mu eta gamma')
-
-        # solve cubic eq and return real root
-        for root in np.roots([-1, 0, mu, eta + gamma]):
+    def get_single_HSS(self, mu, eta, gamma, I=1):
+        for root in np.roots([-1, 0, mu + gamma * I, eta]):
             if root.imag == 0:
                 return root.real
+
+    def getHSS(self, etas=None):
+        mu, eta, gamma = self.getParams('mu eta gamma')
+
+        I = np.trapz(self.kernel(), x=self.tau)
+        print(f'Integral is {I}')
+
+        if etas is None:
+            return self.get_single_HSS(mu, eta, gamma)
+        else:
+            return np.array([self.get_single_HSS(mu, eta, gamma, I=I) for eta in etas])
+
 
     def solve(self, T_transient=0, T_f=100):
         Tf = T_f
@@ -182,7 +195,7 @@ class SHRaman:
         self.deriv_d4u_dx4 = np.roll(np.append(k4, k4), -1)
 
         # for jac of coupling
-        self.deriv_coupling = np.roll(self.kernel()[::-1], 1)
+        self.deriv_coupling = np.roll(self.kernel()[::-1], 1) * self.getParam('dx')
         
     def setParam(self, pname, pval):
         self.p[pname] = pval

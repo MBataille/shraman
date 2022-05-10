@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from shraman import SHRaman, params, DATADIR
+from .shraman import SHRaman, params, DATADIR
 
 
 def readParameterSweep(branch, pname):
@@ -19,8 +19,9 @@ def readParameterSweep(branch, pname):
         u = sh.loadState(sh.getFilename(ext='.npy'))
         L2.append(np.sum(u ** 2) / len(u))
 
-    for pval in prange[-20:-10]:
+    for pval in prange[-19:-9][::2]:
         params[pname] = pval
+
         sh = SHRaman(branch=branch, **params)
         u = sh.loadState(sh.getFilename(ext='.npy'))
         u = sh.center(u)
@@ -38,4 +39,3 @@ def readParameterSweep(branch, pname):
     # plt.show()
     # print(verrs)
 
-readParameterSweep('gsimple', 'gamma')
