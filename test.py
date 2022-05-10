@@ -1,3 +1,4 @@
+#%%
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -9,17 +10,15 @@ from src import advancePALC, SHRaman, params, animateBifDiag, plotBifDiags, para
 params['gamma'] = 0.24
 params['eta'] = 0.0
 
-animateBifDiag('periodic_gamma=0.24', branches_ref=('hss_gamma=0.24', ), colors=['tab:blue', 'tab:green'], **params)
-plotBifDiags(('periodic_gamma=0.24','periodic_back_gamma=0.24' ),'bs1_gamma=0.24', 'hss_gamma=0.24')
+#animateBifDiag('periodic_gamma=0.24', branches_ref=('hss_gamma=0.24', ), colors=['tab:blue', 'tab:green'], **params)
+#plotBifDiags(('periodic_gamma=0.24','periodic_back_gamma=0.24' ),'bs1_gamma=0.24', 'hss_gamma=0.24')
 
-params['gamma'] = 0.24
-params['eta'] = 0.0
 
 shr = SHRaman(branch = 'bs1_dns', **params)
 
 X = np.zeros(params['N']) +  shr.getHSS()
 
-X = shr.loadX('pattern_gamma=0.22')
+X = shr.loadX('bs1_gamma=0.24')
 
 u = X[:-1]
 
@@ -28,17 +27,22 @@ u = X[:-1]
 
 #params['eta'] = X[-1]
 
-plt.plot(u)
-plt.show()
+#plt.plot(u)
+#plt.plot(-u)
+#plt.show()
 
+#%%
+
+
+X = np.append(-u, X[-1])
 X0 = np.append(X, params['eta']) # append eta
 #X0 = X
 t0 = np.zeros_like(X0)
-t0[-1] = -1
+t0[-1] = 1
 
 #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
 with threadpool_limits(limits=1):
-    advancePALC(X0, 5e-3, t0=t0, branch='periodic_back_gamma=0.24', motionless=False, **params)
+    advancePALC(X0, 5e-3, t0=t0, branch='ds1_gamma=0.24', motionless=False, **params)
 
 # etas = np.linspace(-2.0, 2.0, 1001)
 

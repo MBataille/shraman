@@ -66,6 +66,36 @@ def getPrange(p0, pf, dp):
         return np.linspace(pf, p0, Np)[::-1]
     return np.linspace(p0, pf, Np)
 
+def readParameterSweep(branch, pname):
+    df = pd.read_csv(DATADIR + branch + '.csv')
+
+    prange = df[pname]
+    vs = df['v']
+    verrs = df['verr']
+
+    L2 = []
+    for pval in prange:
+        params[pname] = pval
+        sh = SHRaman(branch=branch, **params)
+        u = sh.loadState(sh.getFilename(ext='.npy'))
+        L2.append(np.sum(u ** 2) / len(u))
+
+    for pval in prange[-19:-9][::2]:
+        params[pname] = pval
+
+        sh = SHRaman(branch=branch, **params)
+        u = sh.loadState(sh.getFilename(ext='.npy'))
+        u = sh.center(u)
+
+        plt.plot(u, label=f'{pname} = {round(pval, 3)}')
+    # plt.title()
+    plt.legend()
+    plt.show()
+
+    plt.plot(prange, L2)
+    plt.show()
+    print(verrs)
+
 if __name__ == '__main__':
 
     branch = 'gsimple2'
