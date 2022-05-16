@@ -7,8 +7,10 @@ import time
 import os
 
 from .shraman import SHRaman, params
+from .reader import read_summary, read_state
 
 GAMMA = 0.12
+FACT = 100
 
 def separateBranches(df):
     etas = df['eta']
@@ -111,7 +113,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
     txt = ax3.text(0.1, 0.1, '', transform=ax3.transAxes)
     ax3.set_ylim(-1.3, 1.3)
 
-    fact = 100
+    fact = FACT
 
 
     def animate(j):
@@ -154,9 +156,9 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
     #plt.clf()
     plt.show()
 
-def plotBifDiags(*branches,  **other_params):
+def plotBifDiags(*branches, points=[], legend=True, **other_params):
 
-    fig, (ax1, ax2) = plt.subplots(2)
+    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
 
     COLORS = list(mcolors.TABLEAU_COLORS)
 
@@ -166,10 +168,10 @@ def plotBifDiags(*branches,  **other_params):
 
     for k, branch in enumerate(branches):
 
-        if type(branch) != tuple:
+        if type(branch) != list:
             branch = (branch, )
 
-        for br in branch:
+        for j, br in enumerate(branch):
 
             shr = SHRaman(branch=br, **params)
 
@@ -182,27 +184,77 @@ def plotBifDiags(*branches,  **other_params):
                 c = curves[i]
                 line = stab[i]
 
-                if i == 0:
+                if i == 0 and j == 0:
                     label = br.split('_')[0]
                 else:
                     label = None
 
-                if br[:3] != 'hss': # homogeneous solutions do not have velocity
+                if br[:3] != 'hss': # homogeneous solutions do not have speed
                     ax1.plot(c['eta'], c['v'], line, color=COLORS[k], label=label)
                 ax2.plot(c['eta'], c['L2'], line, color=COLORS[k], label=label)
 
 
+    # plot pts in bif diag
+    for point in points:
+
+        branch = point['branch']
+        file_idx = point['file_idx']
+
+        df = read_summary(branch).iloc[FACT * file_idx]
+
+        ax1.plot(df['eta'], df['v'], 'ok')
+        ax2.plot(df['eta'], df['L2'], 'ok')
+
+
     ax1.set_ylabel('v')
-    ax1.set_xlabel('eta')
+    # ax1.set_xlabel('eta')
     ax2.set_ylabel('L2*')
     ax2.set_xlabel('eta')
 
-    plt.legend()
+    if legend:
+        plt.legend()
 
     #etashss = np.linspace(-1., 1., 1001)
     #ax2.plot(etashss, getHSS(etashss) ** 2, color='tab:orange')   
 
     plt.show()
+
+
+    # save profile for every pt
+    for point in points: 
+
+        branch = point['branch']
+        file_idx = point['file_idx']
+
+        u = read_state(branch, f'x{file_idx}')
+
+        if 'shift' in point:
+            u = np.roll(u, point['shift'])
+
+        if 'tag' in point: # save profile and fft
+            fig_tmp, ax_tmp = plt.subplots(1)
+            
+            shr_tmp = SHRaman(**params)
+            ax_tmp.plot(shr_tmp.tau, u)
+            ax_tmp.set_ylim(-0.6, 0.6)
+            
+            tag = point['tag']
+            fig_tmp.savefig(f'figs/{tag}.svg')
+            fig_tmp.clear()
+
+            fig_tmp, ax_tmp = plt.subplots(1)
+
+            # Fourier transform
+            N, dx = shr_tmp.getParams('N dx')
+            freqs = np.fft.fftshift(np.fft.fftfreq(N, d=dx)) * 2 * np.pi
+            u_ft = np.fft.fftshift(np.fft.fft(u)) * 2 / N
+
+            ax_tmp.semilogy(freqs, np.abs(u_ft))
+
+            ax_tmp.set_ylim(1e-14, 1e0)
+            
+            fig_tmp.savefig(f'figs/{tag}_fft.svg')
+            fig_tmp.clear()
      
 GAMMA = 0.12
 
