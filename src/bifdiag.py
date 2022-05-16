@@ -21,9 +21,13 @@ def parameterSweep(param_name, param_range, initcond=None, **other_params):
 
     if initcond is None:
         shr.setInitialConditionGaussian()
+
+        plt.plot(shr.u0)
+        plt.show()
+
         shr.solve()
 
-        last_state = shr.getState(-1)
+        last_state = shr.getState(-1) #* np.exp(-((shr.tau - shr.p['L'] / 2) / 17) ** 2)
     else:
         last_state = initcond
 
@@ -109,14 +113,14 @@ if __name__ == '__main__':
     # pf = float(sys.argv[4])
     # dp = float(sys.argv[5])
 
-    params = {'N': 512, 'dx': 0.5, 'tau1': 3, 'tau2': 10,
-          'eta': 0, 'mu': -0.1, 'alpha': -1.0, 'beta': -1.0,
-          'gamma': 0.7}
+    params = {'N': 512, 'dx': 0.5, 'tau0': 18, 'tau1': 12, 'tau2': 32,
+          'eta': 0, 'mu': -0.5, 'alpha': -1.0, 'beta': -1.0,
+          'gamma': 0.5}
 
     prange = getPrange(p0, pf, dp)
 
     params['gamma'] = p0
-    sh = SHRaman(branch='gsimple', **params)
+    sh = SHRaman(branch='gmono', **params)
     u0 = sh.loadState(sh.getFilename(ext='.npy'))
 
     print(f'Parameter sweep of {pname} from {prange[0]} to {prange[-1]} with {len(prange)} points.')

@@ -16,6 +16,13 @@ class SHRaman:
         
         # Defining useful parameters
         self.p['L']= self.p['N'] * self.p['dx']
+
+        # we will consider tau0 = 1 and as such
+        # we must rescale tau1 and tau2 accordingly.
+        if 'tau0' in self.p:
+            self.p['tau1'] = self.p['tau1'] / self.p['tau0']
+            self.p['tau2'] = self.p['tau2'] / self.p['tau0']
+        
         self.p['a'] = (self.p['tau1'] ** 2 + self.p['tau2'] ** 2) \
                     / (self.p['tau1'] * self.p['tau2'] ** 2)
 
@@ -92,13 +99,13 @@ class SHRaman:
 
         if T_transient > 0:
             t_span_trans = (0., T_transient)
-            self.u0 = solve_ivp(self.rhs_shraman, t_span_trans, self.u0, t_eval=[T_transient]).y[:, 0]
+            self.u0 = solve_ivp(self.rhs_shraman, t_span_trans, self.u0, t_eval=[T_transient], max_step=0.01).y[:, 0]
 
         t_span = (T_transient, Tf)
         t_eval = np.linspace(*t_span, int((Tf - T_transient) / dt) + 1)
 
         self.t = t_eval - T_transient # so that it starts at 0
-        self.sol = solve_ivp(self.rhs_shraman, t_span, self.u0, t_eval=t_eval).y
+        self.sol = solve_ivp(self.rhs_shraman, t_span, self.u0, t_eval=t_eval, max_step=0.01).y
 
     def getState(self, k):
         return self.sol[:, k]
@@ -132,7 +139,8 @@ class SHRaman:
 
     def setInitialConditionGaussian(self):
         L = self.p['L']
-        self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2 
+        #self.u0 = np.exp(- (self.tau - L/2)**2 / (L / 5)) * np.sin(self.tau / 8)
+        self.u0 =  np.exp(-((self.tau - L / 2) / 12) ** 2) + np.exp(-((self.tau - 3 * L / 8) / 12) ** 2) - 0.2
 
     def setInitialConditionPattern(self, wavelength=None):
         if wavelength is None: wavelength = self.p['L'] / 6
@@ -348,9 +356,10 @@ class SHRaman:
 
         return jac
 
-params = {'N': 512, 'dx': 0.5, 'tau1': 3, 'tau2': 10,
-          'eta': 0, 'mu': -0.1, 'alpha': -1.0, 'beta': -1.0,
-          'gamma': 0.7}
+params = { 'N': 512, 'dx': 0.5, 
+          'tau0': 18, 'tau1': 12, 'tau2': 32,
+          'eta': 0, 'mu': -0.1, 'alpha': -1.0, 
+          'beta': -1.0, 'gamma': 0.7 }
 
 if __name__ == '__main__':
     #params['eta'] = 0.2
