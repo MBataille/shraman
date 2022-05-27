@@ -18,9 +18,9 @@ def readX(branch, filename):
     shr = SHRaman(branch=branch, **params)
     return shr.loadX(filename)
 
-def write_state(file, branch, filename):
+def write_state(state, branch, filename):
     shr = SHRaman(branch=branch, **params)
-    shr.saveX(file, filename=filename)
+    shr.saveX(state, filename=filename)
 
 def read_belgium(file):
     mat = loadmat(file)

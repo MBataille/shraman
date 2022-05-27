@@ -9,6 +9,7 @@ from src import (advancePALC, SHRaman, params, animateBifDiag,
                 readParameterSweep, read_state, read_summary, 
                 readX, read_belgium, interpolate, write_state)
 from src.reader import write_state
+import sys
 
 def branch_name(branch, gamma=0.24, way=''):
     if way != '':
@@ -21,22 +22,62 @@ def branches_name(branches, ways, gamma=0.24):
 
 #%%
 
-
-u = read_state('subcritical', 'bs1', N=512)
-
-params['eta'] = -0.12
-params['tau0'] = 14
-params['tau1'] = 12.2
-params['tau2'] = 32
+params['eta'] = -.5
+params['tau0'] = 1
+params['tau1'] = 3
+params['tau2'] = 10
 fr = 0.18
-params['gamma'] = np.sqrt(3) / 2 * fr
-params['mu'] = -0.1 - params['gamma']
-params['alpha'] = -1.5
+params['gamma'] = 0.25 # np.sqrt(3) / 2 * fr
+params['mu'] = -0.1  # - params['gamma']
+params['alpha'] = -1.8
 params['beta'] = - 4 / 3
 params['dx'] = 0.5
-params['N'] = 512
+params['N'] = 256
 
-parameterSweep('eta', getPrange(-0.12, -0.13, 0.01), initcond=u, branch='sub_dns', **params)
+# animateBifDiag('bs1_belg_', branches_ref=('hss_belg', 'pttrn_belg', 'pttrn_belg_back'), colors=['tab:green', 'tab:orange', 'tab:blue', 'tab:blue'], **params)
+
+
+i = int(sys.argv[1])
+
+#u = read_state(f'bs{i}_large_', 'x0', N=256)
+# v = u[-1]
+# u = np.roll(u, 60)[:256]
+
+# params['N'] = 256
+
+# plt.plot(u)
+# plt.show()
+
+#parameterSweep('eta', getPrange(params['eta'], params['eta'] + 0.01, 0.01), initcond=u, branch=f'bs{i}_large_dns', **params)
+
+#plotBifDiags(['pttrn_belg', 'pttrn_belg_back'], 'hss_belg', *(f'bs{i+1}_belg_' for i in range(17)))
+
+points = [{'branch': f'bs{i+1}_large___', 'file_idx': 0, 'tag': f'A_{i+1}'} for i in range(3)]
+
+plotBifDiags('hss_large_', *(f'bs{i+1}_large___' for i in range(3)), points=points)
+
+# shr = SHRaman(**params)
+# X_hss = shr.getHSS() + np.zeros(params['N'])
+
+# X0 = np.append(X_hss, params['eta'])
+
+X = readX(f'bs{i}_large_', f'x0')
+# X0 = np.append(X, params['eta']) # append eta
+X0 = X
+params['eta'] = X0[-1]
+
+u = X0[:-2]
+plt.plot(u)
+plt.show()
+
+
+t0 = np.zeros_like(X0)
+t0[-1] = 1
+
+#advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
+
+with threadpool_limits(limits=1):
+    advancePALC(X0, 5e-3, t0=t0, branch=f'bs{i}_large___', motionless=False, **params)
 
 
 #%%
@@ -114,23 +155,6 @@ params['eta'] = 0.0
 # X0 = np.append(X, params['eta']) # append eta
 
 
-X = readX(f'bs{I}_gamma=0.24', 'x0')
-X0 = X
-
-u = X[:-2]
-plt.plot(u)
-plt.show()
-
-
-#%%
-
-
-t0 = np.zeros_like(X0)
-t0[-1] = 1
-
-#advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
-with threadpool_limits(limits=1):
-    advancePALC(X0, 5e-3, t0=t0, branch=f'bs{I}_gamma=0.24', motionless=False, **params)
 
 # etas = np.linspace(-2.0, 2.0, 1001)
 

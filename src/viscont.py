@@ -12,6 +12,28 @@ from .reader import read_summary, read_state
 GAMMA = 0.12
 FACT = 100
 
+def separateBranches_(df):
+    k = 0
+    branches = []
+    stability = []
+
+    while True:
+
+        branch = df[df['branch'] == k]
+
+        if len(branch) == 0:
+            break
+        
+        branches.append(branch)
+        
+        line = '-' if branch['stability'].iloc[0] == 'stable' else '--'
+        stability.append(line)
+
+        k += 1
+
+    return branches, stability
+
+
 def separateBranches(df):
     etas = df['eta']
     L2 = df['L2']
@@ -94,7 +116,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
     # ax1.plot(etas, vs)
     # ax2.plot(etas, L2)
 
-    branches, stability = separateBranches(df)
+    branches, stability = separateBranches_(df)
 
     for i in range(len(branches)):
         b = branches[i]
@@ -168,17 +190,17 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
 
     for k, branch in enumerate(branches):
 
+        color = COLORS[k % len(COLORS)]
+
         if type(branch) != list:
             branch = (branch, )
 
         for j, br in enumerate(branch):
 
-            shr = SHRaman(branch=br, **params)
-
-            df = pd.read_csv(shr.branchfolder + 's.csv')
+            df = read_summary(br)
             # df['L2'] = np.sqrt(df['L2'])
 
-            curves, stab = separateBranches(df)
+            curves, stab = separateBranches_(df)
 
             for i in range(len(curves)):
                 c = curves[i]
@@ -190,8 +212,8 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
                     label = None
 
                 if br[:3] != 'hss': # homogeneous solutions do not have speed
-                    ax1.plot(c['eta'], c['v'], line, color=COLORS[k], label=label)
-                ax2.plot(c['eta'], c['L2'], line, color=COLORS[k], label=label)
+                    ax1.plot(c['eta'], c['v'], line, color=color, label=label)
+                ax2.plot(c['eta'], c['L2'], line, color=color, label=label)
 
 
     # plot pts in bif diag
@@ -249,7 +271,7 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
             freqs = np.fft.fftshift(np.fft.fftfreq(N, d=dx)) * 2 * np.pi
             u_ft = np.fft.fftshift(np.fft.fft(u)) * 2 / N
 
-            ax_tmp.semilogy(freqs, np.abs(u_ft))
+            ax_tmp.semilogy(freqs, np.abs(u_ft), '.')
 
             ax_tmp.set_ylim(1e-14, 1e0)
             
