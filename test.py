@@ -22,7 +22,7 @@ def branches_name(branches, ways, gamma=0.24):
 
 #%%
 
-params['eta'] = -.5
+params['eta'] = -.022
 params['tau0'] = 1
 params['tau1'] = 3
 params['tau2'] = 10
@@ -34,37 +34,62 @@ params['beta'] = - 4 / 3
 params['dx'] = 0.5
 params['N'] = 256
 
-# animateBifDiag('bs1_belg_', branches_ref=('hss_belg', 'pttrn_belg', 'pttrn_belg_back'), colors=['tab:green', 'tab:orange', 'tab:blue', 'tab:blue'], **params)
+#animateBifDiag('bs4_large___', **params)
 
 
 i = int(sys.argv[1])
+direction = sys.argv[2]
+if not direction.startswith(('f', 'b')):
+    raise ValueError("Direction must start with 'f' or 'b'")
 
-#u = read_state(f'bs{i}_large_', 'x0', N=256)
-# v = u[-1]
-# u = np.roll(u, 60)[:256]
+#animateBifDiag('bs1_large_mu', param_cont='mu', **params)
+bs_branches = ([f'bs{i+1}_large_mu', f'bs{i+1}_large_mu_back'] for i in range(4))
+ds_branches = ([f'ds{i+1}_large_mu', f'ds{i+1}_large_mu_back'] for i in range(4))
+
+plotBifDiags(*bs_branches, *ds_branches, 'hss_large_mu', ['pattern_large_mu', 'pattern_large_mu_back'] , param_cont='mu', **params)
+
+# u = read_state(f'pttrn_large_dns', f'bs1', N=256)
+# v = 0.7
+# #u = np.roll(u, 60)[:256]
 
 # params['N'] = 256
 
 # plt.plot(u)
 # plt.show()
 
-#parameterSweep('eta', getPrange(params['eta'], params['eta'] + 0.01, 0.01), initcond=u, branch=f'bs{i}_large_dns', **params)
+#parameterSweep('eta', getPrange(params['eta'], params['eta'] + 0.01, 0.01), initcond=u, branch=f'pttrn_large_dns', **params)
 
 #plotBifDiags(['pttrn_belg', 'pttrn_belg_back'], 'hss_belg', *(f'bs{i+1}_belg_' for i in range(17)))
 
-points = [{'branch': f'bs{i+1}_large___', 'file_idx': 0, 'tag': f'A_{i+1}'} for i in range(3)]
+#points = [{'branch': f'bs{i+1}_large___', 'file_idx': 0} for i in range(3)]
+points = [
+    {'branch': 'bs1_large___', 'file_idx': 1, 'tag': 'BS1_'},
+    {'branch': 'bs2_large___', 'file_idx': 30, 'tag': 'BS2_'},
+    {'branch': 'bs3_large___', 'file_idx': 19, 'tag': 'BS3_'},
+    {'branch': 'bs4_large___', 'file_idx': 27, 'tag': 'BS4_'},
+]
 
-plotBifDiags('hss_large_', *(f'bs{i+1}_large___' for i in range(3)), points=points)
 
+bs_branches = (f'bs{i+1}_large_cropped' for i in range(4))
+ds_branches = (f'ds{i+1}_large_cropped' for i in range(4))
+plotBifDiags(['pttrn_large_cropped', 'pttrn_large_back'], 'hss_large___', *bs_branches, *ds_branches)
+
+# params['mu'] = -1.0
 # shr = SHRaman(**params)
 # X_hss = shr.getHSS() + np.zeros(params['N'])
 
-# X0 = np.append(X_hss, params['eta'])
+# X0 = np.append(X_hss, params['mu'])
 
-X = readX(f'bs{i}_large_', f'x0')
-# X0 = np.append(X, params['eta']) # append eta
+# X = np.append(u, v)
+
+#X = readX('pttrn_large_back', 'x0')
+X = readX(f'bs{i}_large___', f'x0')
+X[:256] = - X[:256]
+X[-1] = - X[-1]
+params['eta'] = X[-1]
+X[-1] = params['mu']
+#X0 = np.append(X, params['eta']) # append eta
 X0 = X
-params['eta'] = X0[-1]
 
 u = X0[:-2]
 plt.plot(u)
@@ -72,12 +97,18 @@ plt.show()
 
 
 t0 = np.zeros_like(X0)
-t0[-1] = 1
+suffix = ''
+if direction.startswith('f'):
+    t0[-1] = 1
+else:
+    t0[-1] = -1
+    suffix = '_back'
+
 
 #advanceParam(0.2, 0.0001, X, branch='b1', auto_switch=True,  **params)
 
 with threadpool_limits(limits=1):
-    advancePALC(X0, 5e-3, t0=t0, branch=f'bs{i}_large___', motionless=False, **params)
+    advancePALC(X0, 5e-3, t0=t0, branch=f'ds{i}_large_mu{suffix}', motionless=False, param_cont='mu',**params)
 
 
 #%%
