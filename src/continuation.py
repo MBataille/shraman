@@ -52,7 +52,7 @@ def test_func_stability(jac):
     w = np.linalg.eigvals(jac[:-2, :-2])
     return np.amax(w.real)
 
-def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
+def advancePALC(X0, ds, t0=None, motionless=False, param_cont='eta', equation=SHRaman, **other_params):
 
     _params = {**other_params}
     N = _params['N']
@@ -61,20 +61,22 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
     # tnames = []
 
     vs = []
-    etas = []
+    pconts = []
     L2 = []
     taus = []
     branches = []
     stability = []
 
-    shr = SHRaman(**_params)
+    shr = equation(**_params)
+    if equation == SHRaman:
+        shr.set_param_cont(param_cont)
     if motionless:
         shr.motionless = True
 
     # estimate tangent?
 
-    SAVE_EVERY = 1000
-    SAVE_FILE_EVERY = 100
+    SAVE_EVERY = 100
+    SAVE_FILE_EVERY = 10
 
     output_file = shr.branchfolder  + 's.csv'
     iter_count = 0
@@ -85,16 +87,22 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
     with alive_bar() as bar:
         while True:
 
-            if len(etas) > 0:
-                bar.text(f'eta = {etas[-1]}, L2 = {L2[-1]}, tau = {taus[-1]}')
+            if len(pconts) > 0:
+                bar.text(f'{param_cont} = {pconts[-1]}, L2 = {L2[-1]}, tau = {taus[-1]}')
             
-            if motionless:
-                shr.init_cont(X0[:-1])
-            else:
-                shr.init_cont(X0[:-2])
+            if equation == SHRaman:
 
-            t0 = shr.get_tangent(X0, prev_tangent=t0)
-            shr.init_palc(ds, t0, X0)
+                if motionless:
+                    shr.init_cont(X0[:-1])
+                else:
+                    shr.init_cont(X0[:-2])
+
+                t0 = shr.get_tangent(X0, prev_tangent=t0)
+                shr.init_palc(ds, t0, X0)
+
+            else:
+                shr.init_cont(ds, t0, X0)
+                t0 = shr.tangent
 
             X0, success, tau = newton(X0 + ds * t0, shr.palc_rhs, shr.jacobian_palc, test_function=test_func_stability)
 
@@ -109,15 +117,15 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
                 shr.saveX(X0, filename=f'x{file_count}')
                 file_count += 1
 
-            L2.append(shr.L2norm(X0[:N]))
+            L2.append(shr.L2norm(X0[:-2]))
             vs.append(X0[-2])
-            etas.append(X0[-1])
+            pconts.append(X0[-1])
             taus.append(tau)
             stability.append('stable' if tau < 0 else 'unstable')
             branches.append(branch_count)
 
             if len(taus) > 1 and taus[-1] * taus[-2] < 0:
-                print(f'Bifurcation point (stability change) between eta = {etas[-1]} and {etas[-2]}')
+                print(f'Bifurcation point (stability change) between {param_cont} = {pconts[-1]} and {pconts[-2]}')
                 branch_count += 1
 
             iter_count += 1
@@ -125,14 +133,14 @@ def advancePALC(X0, ds, t0=None, motionless=False, **other_params):
             bar()
 
             if iter_count % SAVE_EVERY == 0:
-                df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
+                df = pd.DataFrame({f'{param_cont}': pconts[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
                 df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save == 0), index=False)
                 last_save = iter_count
 
-    df = pd.DataFrame({'eta': etas[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
+    df = pd.DataFrame({f'{param_cont}': pconts[last_save:], 'v': vs[last_save:], 'L2': L2[last_save:], 'tau': taus[last_save:], 'stability': stability[last_save:], 'branch': branches[last_save:]})
     df.to_csv(shr.branchfolder + f's.csv', mode='a', header=(last_save==0), index=False)
 
-    plt.plot(etas, vs)
+    plt.plot(pconts, vs)
     plt.show()
 
 def advanceParam(p0, dp, X0, switch=False, auto_switch=False, stopAt=None, **other_params):

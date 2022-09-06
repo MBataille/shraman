@@ -26,6 +26,8 @@ class SHRaman:
         self.p['a'] = (self.p['tau1'] ** 2 + self.p['tau2'] ** 2) \
                     / (self.p['tau1'] * self.p['tau2'] ** 2)
 
+        self.param_cont = 'eta'
+
         if 'branch' in params:
             self.branch = params['branch']
             self.branchfolder = os.path.join(DATADIR, self.branch, '')
@@ -42,7 +44,12 @@ class SHRaman:
         # For continuation
         self.switch = False
         self.motionless = False
-        
+
+    def set_param_cont(self, param_cont):
+        if not param_cont in ['eta', 'mu']:
+            raise ValueError("Parameter for Continuation must be either 'eta' or 'mu'")
+        self.param_cont = param_cont     
+    
     def kernel(self):
         tau1, tau2, a = self.getParams('tau1 tau2 a')
         return a * np.exp(-self.tau / tau2) * np.sin(self.tau / tau1)
@@ -72,6 +79,7 @@ class SHRaman:
         
         return eta + mu * u - u ** 3 + alpha * d2u + beta * d4u + gamma * self.coupling(u_ft)
 
+
     def setInitialConditionGaussian(self):
         L = self.p['L']
         self.u0 = np.exp(- (self.tau - L/4)**2 / (L / 50)) - 0.2
@@ -81,16 +89,19 @@ class SHRaman:
             if root.imag == 0:
                 return root.real
 
-    def getHSS(self, etas=None):
+    def getHSS(self, params=None):
         mu, eta, gamma = self.getParams('mu eta gamma')
 
         I = np.trapz(self.kernel(), x=self.tau)
         print(f'Integral is {I}')
 
-        if etas is None:
+        if params is None:
             return self.get_single_HSS(mu, eta, gamma)
         else:
-            return np.array([self.get_single_HSS(mu, eta, gamma, I=I) for eta in etas])
+            if self.param_cont == 'eta':
+                return np.array([self.get_single_HSS(mu, eta, gamma, I=I) for eta in params])
+            elif self.param_cont == 'mu':
+                return np.array([self.get_single_HSS(mu, eta, gamma, I=I) for mu in params])
 
 
     def solve(self, T_transient=0, T_f=100):
@@ -251,7 +262,7 @@ class SHRaman:
         else:
             u0 = X0[:-2]
         
-        self.setParam('eta', X0[-1])
+        self.setParam(self.param_cont, X0[-1])
         self.init_cont(u0)
 
         self.ds = ds
@@ -259,7 +270,7 @@ class SHRaman:
         self.X0 = X0
 
     def palc_rhs(self, X):
-        self.setParam('eta', X[-1])
+        self.setParam(self.param_cont, X[-1])
         F = self.cont_rhs(X[:-1])
         s = np.dot(self.tangent, (X - self.X0)) - self.ds
 
@@ -267,17 +278,21 @@ class SHRaman:
 
     def get_tangent(self, X, jacX=None, prev_tangent=None): # the sign may be off
         N = self.getParam('N')
+        Np1 = N if self.motionless else N + 1
 
         if jacX is None:
             F_x = self.jacobian(X[:-1])
         else:
             F_x = jacX
-        if self.motionless:
-            F_eta = np.ones(N)
-        else:
-            F_eta = np.ones(N+1)
 
-        tx = np.linalg.solve(F_x, -F_eta)
+        F_param = np.zeros(Np1)
+        if self.param_cont == 'eta':
+            F_param[:N] = 1
+
+        elif self.param_cont == 'mu':
+            F_param[:N] = X[:N]
+
+        tx = np.linalg.solve(F_x, -F_param)
         t = np.append(tx, 1)
 
         if prev_tangent is not None:
@@ -290,7 +305,7 @@ class SHRaman:
 
     def jacobian_palc(self, X, jacX=None):
         N = self.getParam('N')
-        self.setParam('eta', X[-1])
+        self.setParam(self.param_cont, X[-1])
 
         Np1 = N if self.motionless else N+1
 
@@ -301,8 +316,13 @@ class SHRaman:
         else:
             jac[:Np1, :Np1] = jacX
 
-        jac[:N, Np1] = 1 # deriv of F w/r to eta    
-        jac[Np1, :] = self.tangent # deriv of PALC w/r to X, eta
+        # Deriv of F w/r to parm cont
+        if self.param_cont == 'eta':
+            jac[:N, Np1] = 1
+        elif self.param_cont == 'mu':
+            jac[:N, Np1] = X[:N]
+ 
+        jac[Np1, :] = self.tangent # deriv of PALC w/r to (X, param)
 
         return jac
 

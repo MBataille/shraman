@@ -81,7 +81,7 @@ def getHSS(etas):
     
     return us
 
-def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
+def animateBifDiag(branch, branches_ref=None, colors=None, param_cont='eta', **other_params):
     shr = SHRaman(branch=branch, **other_params)
     
     df = pd.read_csv(shr.branchfolder + 's.csv').iloc[:100000]
@@ -89,7 +89,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
 
     #print(np.asarray(df.iloc[0]['u']) )
 
-    etas = df['eta']
+    pconts = df[param_cont]
     vs = df['v']
     #df['L2'] = np.sqrt(df['L2']) 
 
@@ -109,7 +109,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
     #return
     # Ls = 
 
-    N = len(etas)
+    N = len(pconts)
 
     fig, (ax1, ax2, ax3) = plt.subplots(3)
 
@@ -126,11 +126,11 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
             color = 'tab:blue'
         else:
             color = colors[0]
-        ax1.plot(b['eta'], b['v'], line, color=color)
-        ax2.plot(b['eta'], b['L2'], line, color=color)
+        ax1.plot(b[param_cont], b['v'], line, color=color)
+        ax2.plot(b[param_cont], b['L2'], line, color=color)
 
-    p1, = ax1.plot(etas[0:1], vs[0:1], 'ok')
-    p2, = ax2.plot(etas[0:1], L2[0:1], 'ok')
+    p1, = ax1.plot(pconts[0:1], vs[0:1], 'ok')
+    p2, = ax2.plot(pconts[0:1], L2[0:1], 'ok')
     lus, = ax3.plot(us[0][:-2])
     txt = ax3.text(0.1, 0.1, '', transform=ax3.transAxes)
     ax3.set_ylim(-1.3, 1.3)
@@ -148,20 +148,15 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
         return p1, p2, lus, txt
 
     ax1.set_ylabel('v')
-    ax1.set_xlabel('eta')
+    ax1.set_xlabel(param_cont)
     ax2.set_ylabel('L2')
-    ax2.set_xlabel('eta')
+    ax2.set_xlabel(param_cont)
     ax3.set_ylabel('u')
     ax3.set_xlabel('x')
     #frames = 1000
-    frames = int(len(etas) / fact)
+    frames = int(len(pconts) / fact)
     
-    if branches_ref is None:
-        etashss = np.linspace(-1., 1., 1001)
-        u_hss = shr.getHSS(etashss)
-        L2_hss = [shr.L2norm(np.array([u])) for u in u_hss]
-        ax2.plot(etashss, L2_hss, color='tab:orange')
-    else:
+    if branches_ref is not None:
         for i, br in enumerate(branches_ref):
             if colors is None:
                 color = 'tab:orange'
@@ -169,7 +164,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
                 color = colors[i+1]
             shr_ref = SHRaman(branch=br, **params)
             df_ref = pd.read_csv(shr_ref.branchfolder + 's.csv')
-            ax2.plot(df_ref['eta'], df_ref['L2'], color=color)
+            ax2.plot(df_ref[param_cont], df_ref['L2'], color=color)
 
     
     ani = anim.FuncAnimation(fig, animate, frames=frames, blit=True)
@@ -178,7 +173,7 @@ def animateBifDiag(branch, branches_ref=None, colors=None, **other_params):
     #plt.clf()
     plt.show()
 
-def plotBifDiags(*branches, points=[], legend=True, **other_params):
+def plotBifDiags(*branches, points=[], legend=True, param_cont='eta', **other_params):
 
     fig, (ax1, ax2) = plt.subplots(2, sharex=True)
 
@@ -212,8 +207,8 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
                     label = None
 
                 if br[:3] != 'hss': # homogeneous solutions do not have speed
-                    ax1.plot(c['eta'], c['v'], line, color=color, label=label)
-                ax2.plot(c['eta'], c['L2'], line, color=color, label=label)
+                    ax1.plot(c[param_cont], c['v'], line, color=color, label=label)
+                ax2.plot(c[param_cont], c['L2'], line, color=color, label=label)
 
 
     # plot pts in bif diag
@@ -224,14 +219,14 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
 
         df = read_summary(branch).iloc[FACT * file_idx]
 
-        ax1.plot(df['eta'], df['v'], 'ok')
-        ax2.plot(df['eta'], df['L2'], 'ok')
+        ax1.plot(df[param_cont], df['v'], 'ok')
+        ax2.plot(df[param_cont], df['L2'], 'ok')
 
 
     ax1.set_ylabel('v')
-    # ax1.set_xlabel('eta')
+    # ax1.set_xlabel(param_cont)
     ax2.set_ylabel('L2*')
-    ax2.set_xlabel('eta')
+    ax2.set_xlabel(param_cont)
 
     if legend:
         plt.legend()
@@ -264,12 +259,14 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
             fig_tmp.savefig(f'figs/{tag}.svg')
             fig_tmp.clear()
 
+            _u = u
+            #for f in range(10):
             fig_tmp, ax_tmp = plt.subplots(1)
 
             # Fourier transform
             N, dx = shr_tmp.getParams('N dx')
-            freqs = np.fft.fftshift(np.fft.fftfreq(N, d=dx)) * 2 * np.pi
-            u_ft = np.fft.fftshift(np.fft.fft(u)) * 2 / N
+            freqs = np.fft.fftshift(np.fft.fftfreq(len(_u), d=dx)) * 2 * np.pi
+            u_ft = np.fft.fftshift(np.fft.fft(_u)) * 2 / N
 
             ax_tmp.semilogy(freqs, np.abs(u_ft), '.')
 
@@ -277,6 +274,9 @@ def plotBifDiags(*branches, points=[], legend=True, **other_params):
             
             fig_tmp.savefig(f'figs/{tag}_fft.svg')
             fig_tmp.clear()
+            plt.close(fig_tmp)
+
+                #_u = np.append(_u, u)
      
 GAMMA = 0.12
 
