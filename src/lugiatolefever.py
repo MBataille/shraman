@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from pandas import read_csv
 from scipy.integrate import solve_ivp
 
-# TODO delete this
-import numdifftools as nd
-
 import os
 
 BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -449,7 +446,7 @@ if __name__ == "__main__":
         'beta': 1.0,
         'dx': .5,
         'N' : 512,
-        'd4' : -1.0
+        'd4' : -0.1
     }
 
     lle = LugiatoLefeverEquation(branch='lle_dns_test', **params)
@@ -493,7 +490,7 @@ if __name__ == "__main__":
     plt.plot(x, lle.A0.imag)
     plt.show()
 
-    lle.solve_dns(T_f=100, max_step=.0001)
+    lle.solve_dns(T_f=1000, max_step=.001)
 
     A = lle.getState(-1)
 
