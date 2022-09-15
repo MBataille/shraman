@@ -1,1 +1,1 @@
-from .src import advancePALC, SHRaman, params, animateBifDiag, plotBifDiags, readParameterSweep, LugiatoLefeverEquation
+from .src import advancePALC, SHRaman, params, animateBifDiag, plotBifDiags, readParameterSweep, LugiatoLefeverEquation, cont2dns

@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.animation as anim
+import seaborn as sns
 import pandas as pd
 import time
 import os
@@ -11,6 +12,33 @@ from .reader import read_summary, read_state
 
 GAMMA = 0.12
 FACT = 100
+
+## plot params ##
+
+sns.set_palette('viridis')
+# Configuración de los gráficos
+fsize = 15
+tsize = 16
+tdir = 'in'
+major = 5.0
+minor = 3.0
+lwidth = 0.7
+lhandle = 2.0
+plt.style.use('seaborn-deep')
+plt.rcParams['text.usetex'] = True
+plt.rcParams['font.size'] = fsize
+plt.rcParams['legend.fontsize'] = tsize-4
+plt.rcParams['xtick.direction'] = tdir
+plt.rcParams['ytick.direction'] = tdir
+plt.rcParams['xtick.major.size'] = major
+plt.rcParams['xtick.minor.size'] = minor
+plt.rcParams['ytick.major.size'] = 5.0
+plt.rcParams['ytick.minor.size'] = 3.0
+plt.rcParams['axes.linewidth'] = lwidth
+plt.rcParams['legend.handlelength'] = lhandle
+plt.rcParams['axes.labelsize'] = tsize + 4
+
+
 
 def separateBranches_(df):
     k = 0
@@ -173,11 +201,24 @@ def animateBifDiag(branch, branches_ref=None, colors=None, param_cont='eta', **o
     #plt.clf()
     plt.show()
 
-def plotBifDiags(*branches, points=[], legend=True, param_cont='eta', **other_params):
+def plotBifDiags(*branches, points=[], legend=True, param_cont='eta', COLORS=None, 
+    figsize=None, vertical_lines=None , lims=None, ticks=None, 
+    plot_points=True, save_points=True, **other_params):
 
-    fig, (ax1, ax2) = plt.subplots(2, sharex=True)
+    fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=figsize)
+    
+    if lims is not None:
+        xlims, ylims = lims
+        ax1.set_xlim(xlims)
+        ax1.set_ylim(ylims)
 
-    COLORS = list(mcolors.TABLEAU_COLORS)
+    if ticks is not None:
+        xticks, yticks = ticks
+        ax1.set_xticks(xticks)
+        ax1.set_yticks(yticks)
+
+    if COLORS is None:
+        COLORS = list(mcolors.TABLEAU_COLORS)
 
     _params = {**params}
     for p in other_params:
@@ -207,29 +248,35 @@ def plotBifDiags(*branches, points=[], legend=True, param_cont='eta', **other_pa
                     label = None
 
                 if br[:3] != 'hss': # homogeneous solutions do not have speed
-                    ax1.plot(c[param_cont], c['v'], line, color=color, label=label)
-                ax2.plot(c[param_cont], c['L2'], line, color=color, label=label)
+                    ax2.plot(c[param_cont], c['v'], line, color=color, label=label)
+                ax1.plot(c[param_cont], c['L2'], line, color=color, label=label)
+                if legend:
+                    plt.legend()
 
+    if vertical_lines is not None:
+        ax1.vlines(vertical_lines['x'], vertical_lines['ymin'], vertical_lines['ymax'],
+                    colors=vertical_lines['colors'], linestyles=vertical_lines['linestyles'])
 
     # plot pts in bif diag
-    for point in points:
+    if plot_points:
+        for point in points:
 
-        branch = point['branch']
-        file_idx = point['file_idx']
+            branch = point['branch']
+            file_idx = point['file_idx']
 
-        df = read_summary(branch).iloc[FACT * file_idx]
+            df = read_summary(branch).iloc[FACT * file_idx]
 
-        ax1.plot(df[param_cont], df['v'], 'ok')
-        ax2.plot(df[param_cont], df['L2'], 'ok')
+            ax2.plot(df[param_cont], df['v'], 'ok')
+            ax1.plot(df[param_cont], df['L2'], 'ok')
 
 
-    ax1.set_ylabel('v')
+    ax2.set_ylabel(r'$v$')
     # ax1.set_xlabel(param_cont)
-    ax2.set_ylabel('L2*')
-    ax2.set_xlabel(param_cont)
-
-    if legend:
-        plt.legend()
+    ax1.set_ylabel(r'$L^{2*}$')
+    if param_cont == 'eta':
+        ax2.set_xlabel(r'$\eta$')
+    else:
+        ax2.set_xlabel(param_cont)
 
     #etashss = np.linspace(-1., 1., 1001)
     #ax2.plot(etashss, getHSS(etashss) ** 2, color='tab:orange')   
@@ -238,43 +285,58 @@ def plotBifDiags(*branches, points=[], legend=True, param_cont='eta', **other_pa
 
 
     # save profile for every pt
-    for point in points: 
+    if save_points:
+        for point in points: 
 
-        branch = point['branch']
-        file_idx = point['file_idx']
+            branch = point['branch']
+            file_idx = point['file_idx']
+            color = point['color']
 
-        u = read_state(branch, f'x{file_idx}')
+            u = read_state(branch, f'x{file_idx}')
 
-        if 'shift' in point:
-            u = np.roll(u, point['shift'])
+            if 'shift' in point:
+                u = np.roll(u, point['shift'])
 
-        if 'tag' in point: # save profile and fft
-            fig_tmp, ax_tmp = plt.subplots(1)
-            
-            shr_tmp = SHRaman(**params)
-            ax_tmp.plot(shr_tmp.tau, u)
-            ax_tmp.set_ylim(-0.6, 0.6)
-            
-            tag = point['tag']
-            fig_tmp.savefig(f'figs/{tag}.svg')
-            fig_tmp.clear()
+            if 'tag' in point: # save profile and fft
+                fig_tmp, ax_tmp = plt.subplots(1)
+                
+                shr_tmp = SHRaman(**params)
+                u = shr_tmp.center(u)
+                ax_tmp.plot(shr_tmp.tau, u, linewidth=3, color=color)
 
-            _u = u
-            #for f in range(10):
-            fig_tmp, ax_tmp = plt.subplots(1)
+                ax_tmp.tick_params(axis='y', length=8, width=2)
 
-            # Fourier transform
-            N, dx = shr_tmp.getParams('N dx')
-            freqs = np.fft.fftshift(np.fft.fftfreq(len(_u), d=dx)) * 2 * np.pi
-            u_ft = np.fft.fftshift(np.fft.fft(_u)) * 2 / N
+                ax_tmp.set_ylim(-0.7, 0.7)
+                ax_tmp.set_yticks([-0.6, 0.6])
 
-            ax_tmp.semilogy(freqs, np.abs(u_ft), '.')
+                xlims = [0, 128]
+                ax_tmp.set_xlim(*xlims)
+                ax_tmp.set_xticks(xlims)
+                #ax_tmp.set_xticklabels([0, 128])
 
-            ax_tmp.set_ylim(1e-14, 1e0)
-            
-            fig_tmp.savefig(f'figs/{tag}_fft.svg')
-            fig_tmp.clear()
-            plt.close(fig_tmp)
+                ax_tmp.set_xlabel(r'$\tau$')
+                ax_tmp.set_ylabel(r'$u$')
+
+                tag = point['tag']
+                fig_tmp.savefig(f'figs/{tag}.svg', bbox_inches='tight')
+                fig_tmp.clear()
+
+                _u = u
+                #for f in range(10):
+                fig_tmp, ax_tmp = plt.subplots(1)
+
+                # Fourier transform
+                N, dx = shr_tmp.getParams('N dx')
+                freqs = np.fft.fftshift(np.fft.fftfreq(len(_u), d=dx)) * 2 * np.pi
+                u_ft = np.fft.fftshift(np.fft.fft(_u)) * 2 / N
+
+                ax_tmp.semilogy(freqs, np.abs(u_ft), '.')
+
+                ax_tmp.set_ylim(1e-14, 1e0)
+                
+                fig_tmp.savefig(f'figs/{tag}_fft.svg')
+                fig_tmp.clear()
+                plt.close(fig_tmp)
 
                 #_u = np.append(_u, u)
      

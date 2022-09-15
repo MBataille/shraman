@@ -23,7 +23,7 @@ params = {
     'beta': 1.0,
     'dx': 0.25,
     'N' : 512,
-    'd4' : 0
+    'd4' : -1.0
 }
 
 lle = LugiatoLefeverEquation(branch='lle_dns_test', **params)
@@ -34,6 +34,13 @@ N = lle.getParam('N')
 A0 = X[:N] + 1j * X[N:2*N]
 c0, S0 = X[2*N:2*N+2]
 
+lle.setInitialCondition(A0)
+lle.solve_dns()
+Af = lle.getState(-1)
+lle.saveState()
+plt.plot(np.abs(Af) ** 2)
+plt.show()
+
 #lle.init_cont(X, 0.1)
 #%%
 
@@ -42,8 +49,9 @@ plotBifDiags('lle_palc_test_f_R=0.05')
 
 #%%
 
-
+plt.plot(X)
+plt.show()
 t0 = np.zeros_like(X)
 t0[-1] = 1
 with threadpool_limits(limits=1):
-    advancePALC(X, 1e-2, t0=t0, branch='lle_palc_test_f_R=0.05', equation=LugiatoLefeverEquation, **params)
+    advancePALC(X, 1e-2, t0=t0, branch='lle_palc_d4', equation=LugiatoLefeverEquation, **params)

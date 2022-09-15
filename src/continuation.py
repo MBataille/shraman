@@ -70,8 +70,7 @@ def advancePALC(X0, ds, t0=None, motionless=False, param_cont='eta', equation=SH
     shr = equation(**_params)
     if equation == SHRaman:
         shr.set_param_cont(param_cont)
-    if motionless:
-        shr.motionless = True
+    shr.motionless = motionless
 
     # estimate tangent?
 

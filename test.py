@@ -1,4 +1,5 @@
-#%%
+# %%
+from turtle import color
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -7,9 +8,11 @@ from threadpoolctl import threadpool_limits
 from src import (advancePALC, SHRaman, params, animateBifDiag, 
                 plotBifDiags, parameterSweep, getPrange,
                 readParameterSweep, read_state, read_summary, 
-                readX, read_belgium, interpolate, write_state)
+                readX, read_belgium, interpolate, shraman, write_state,
+                cont2dns)
 from src.reader import write_state
 import sys
+import seaborn as sns
 
 def branch_name(branch, gamma=0.24, way=''):
     if way != '':
@@ -34,6 +37,11 @@ params['beta'] = - 4 / 3
 params['dx'] = 0.5
 params['N'] = 256
 
+# %%
+
+#cont2dns(SHRaman, params, 'eta', 'bs4_large___', np.arange(30))
+
+# %%
 #animateBifDiag('bs4_large___', **params)
 
 
@@ -46,7 +54,7 @@ if not direction.startswith(('f', 'b')):
 bs_branches = ([f'bs{i+1}_large_mu', f'bs{i+1}_large_mu_back'] for i in range(4))
 ds_branches = ([f'ds{i+1}_large_mu', f'ds{i+1}_large_mu_back'] for i in range(4))
 
-plotBifDiags(*bs_branches, *ds_branches, 'hss_large_mu', ['pattern_large_mu', 'pattern_large_mu_back'] , param_cont='mu', **params)
+#plotBifDiags(*bs_branches, *ds_branches, 'hss_large_mu', ['pattern_large_mu', 'pattern_large_mu_back'] , param_cont='mu', **params)
 
 # u = read_state(f'pttrn_large_dns', f'bs1', N=256)
 # v = 0.7
@@ -62,17 +70,50 @@ plotBifDiags(*bs_branches, *ds_branches, 'hss_large_mu', ['pattern_large_mu', 'p
 #plotBifDiags(['pttrn_belg', 'pttrn_belg_back'], 'hss_belg', *(f'bs{i+1}_belg_' for i in range(17)))
 
 #points = [{'branch': f'bs{i+1}_large___', 'file_idx': 0} for i in range(3)]
-points = [
-    {'branch': 'bs1_large___', 'file_idx': 1, 'tag': 'BS1_'},
-    {'branch': 'bs2_large___', 'file_idx': 30, 'tag': 'BS2_'},
-    {'branch': 'bs3_large___', 'file_idx': 19, 'tag': 'BS3_'},
-    {'branch': 'bs4_large___', 'file_idx': 27, 'tag': 'BS4_'},
+
+#animateBifDiag('ds1_large___', **params)
+
+color_palette = list(sns.color_palette('magma_r', n_colors=6))
+COLORS = [color_palette[-1], color_palette[0]] + color_palette[1:-1] * 2
+
+ds1_color = 'tab:blue'
+
+points_zoom_DS = [
+    {'branch': 'ds1_large___', 'file_idx': 0, 'tag': 'DS1_A', 'color': ds1_color},
+    {'branch': 'ds1_large___', 'file_idx': 4, 'tag': 'DS1_B', 'color': ds1_color},
+    {'branch': 'ds1_large___', 'file_idx': 9, 'tag': 'DS1_C', 'color': ds1_color},
+    {'branch': 'ds1_large___', 'file_idx': 14, 'tag': 'DS1_D', 'color': ds1_color},
 ]
 
+points = [
+    {'branch': 'bs1_large___', 'file_idx': 1, 'tag': 'BS1_', 'color': COLORS[2]},
+    {'branch': 'ds1_large___', 'file_idx': 18, 'tag': 'DS1_', 'color': COLORS[2]},
+    {'branch': 'pttrn_large_', 'file_idx': 4, 'tag': 'Pttrn_', 'color': COLORS[0] },
+    #{'branch': 'bs4_large___', 'file_idx': 27, 'tag': 'BS4_'},
+]
 
 bs_branches = (f'bs{i+1}_large_cropped' for i in range(4))
 ds_branches = (f'ds{i+1}_large_cropped' for i in range(4))
-plotBifDiags(['pttrn_large_cropped', 'pttrn_large_back'], 'hss_large___', *bs_branches, *ds_branches)
+
+vertical_lines = {
+    'x': [0.0589071959369597, -0.0589071953242026, 0.015261596648091, -0.0152615692774482],
+    'ymin' : [0] * 4,
+    'ymax' : [0.1429575860185371, 0.1112990486665574, 0.1050925246072901, 0.1449074790511632],
+    'colors': ['gray'] * 4,
+    'linestyles': ['dashed'] * 2 + ['dashdot'] * 2,
+}
+
+xlims = (-0.065, 0.065)
+ylims = (0.091, 0.16)
+
+xticks = [-.04, 0, .04]
+yticks = [.144, .148, .152]
+
+plotBifDiags(['pttrn_large_cropped', 'pttrn_large_cropped_back'], 
+                'hss_large___', *bs_branches, *ds_branches, 
+                COLORS=COLORS, legend=False, vertical_lines=vertical_lines,
+                figsize=(7, 15), lims=(xlims, ylims), ticks=(xticks, yticks),
+                plot_points=True, save_points=True, points=points_zoom_DS)
 
 # params['mu'] = -1.0
 # shr = SHRaman(**params)

@@ -106,10 +106,10 @@ class LugiatoLefeverEquation():
         # debug
         # return 1j * beta * d2A # + 1j * f_R * A * coupling
 
-        return S - (1 + 1j * Delta) * A + 1j * beta * d2A + d4 * 1j * d4A \
+        return S - (1 + 1j * Delta) * A + 1j * beta * d2A + 1j * d4 * d4A \
                 + 1j * (1 - f_R) * modA2 * A + 1j * f_R * A * coupling
 
-    def solve_dns(self, T_transient=0, T_f = 100):
+    def solve_dns(self, T_transient=0, T_f = 100, max_step=0.1):
         
         dt = 0.1
         
@@ -124,7 +124,7 @@ class LugiatoLefeverEquation():
         t_eval = np.linspace(*t_span, int((T_f - T_transient) / dt) + 1)
 
         self.t = t_eval - T_transient
-        self.sol = solve_ivp(self.rhs, t_span, self.A0, t_eval=t_eval, max_step=0.005).y
+        self.sol = solve_ivp(self.rhs, t_span, self.A0, t_eval=t_eval, max_step=max_step).y
 
     def init_cont(self, ds, t0, X0):
         """Sets the parts of the jacobian associted with
@@ -166,7 +166,7 @@ class LugiatoLefeverEquation():
         for the pseudo-arclength method. Note: tangent must be already computed"""
 
         # len(X) = 2*N + 2 = real(N) + im(N) + pinning(1) + parameter(1)
-        N, Delta, beta, f_R = self.getParams('N Delta beta f_R')
+        N, Delta, beta, f_R, d4 = self.getParams('N Delta beta f_R d4')
 
         U = X[:N]
         V = X[N:2*N]
@@ -178,6 +178,8 @@ class LugiatoLefeverEquation():
         dV = self.spectral_deriv(V_ft, 1, real=True)
         d2U = self.spectral_deriv(U_ft, 2, real=True)
         d2V = self.spectral_deriv(V_ft, 2, real=True)
+        d4U = self.spectral_deriv(U_ft, 4, real=True)
+        d4V = self.spectral_deriv(U_ft, 4, real=True)
 
         modA2 = U * U + V * V
         coupling =  f_R * self.coupling(modA2, real=True, isInFourierSpace=False)
@@ -187,9 +189,9 @@ class LugiatoLefeverEquation():
         self.setParam('S', S)
 
         rhs_LLE_real = c * dU + S - U + Delta * V - beta * d2V \
-            - (1 - f_R) * modA2 * V - V * coupling
+            - d4 * d4V - (1 - f_R) * modA2 * V - V * coupling
         rhs_LLE_imag = c * dV - Delta * U - V + beta * d2U \
-            + (1 - f_R)  * modA2 * U + U * coupling
+            + d4 * d4U + (1 - f_R)  * modA2 * U + U * coupling
 
 
         # This could be optimized by computing only once A_ft
@@ -197,12 +199,17 @@ class LugiatoLefeverEquation():
 
 
         dx = self.getParam('dx')
-        pinning_condition = np.trapz(U * self.dU0dx - V * self.dV0dx, dx=dx)
+        if not self.motionless:
+            pinning_condition = np.trapz(U * self.dU0dx - V * self.dV0dx, dx=dx)
 
         palc = np.dot(self.tangent, X - self.X0) - self.ds
 
         rhs = np.append(rhs_LLE_real, rhs_LLE_imag)
-        rhs = np.append(rhs, np.array([pinning_condition, palc]))
+        
+        if self.motionless:
+            rhs = np.append(rhs, np.array([palc]))
+        else:
+            rhs = np.append(rhs, np.array([pinning_condition, palc]))
 
         return rhs
 
@@ -252,12 +259,12 @@ class LugiatoLefeverEquation():
                 jac[i+N, N:2*N] = c * self.deriv_dA_dx[j0:jf]  + U[i] * V * coupling_term
                 jac[i+N, i+N] += -1 + 2 * one_minus_fr * V[i] * U[i]
 
-
-            # J_13
-            jac[0:N, 2*N] = dA_dx.real
-            
-            #J_23
-            jac[N:2*N, 2*N] = dA_dx.imag
+            if not self.motionless:
+                # J_13
+                jac[0:N, 2*N] = dA_dx.real
+                
+                #J_23
+                jac[N:2*N, 2*N] = dA_dx.imag
 
             # J_31
             jac[2*N, 0:N] = self.dU0dx  * dx
@@ -270,9 +277,9 @@ class LugiatoLefeverEquation():
 
         # PALC terms
         if not forTangent:
-            jac[2*N + 1, :]= self.tangent # deriv w/r to X
+            jac[M-1, :]= self.tangent # deriv w/r to X
 
-        jac[:N, 2*N + 1] = 1 # deriv w/r to S
+        jac[:N, M-1] = 1 # deriv w/r to S
 
         return jac
 
@@ -435,48 +442,50 @@ if __name__ == "__main__":
     params = {
         'Delta': 1.7,
         'S': 1.2,
-        'f_R': 0.05,
+        'f_R': 0.03,
         'tau0': 1,
         'tau1': 3,
         'tau2': 10,
         'beta': 1.0,
-        'dx': 0.25,
+        'dx': .5,
         'N' : 512,
-        'd4' : 0
+        'd4' : -1.0
     }
 
     lle = LugiatoLefeverEquation(branch='lle_dns_test', **params)
 
-    X = lle.loadX()
+    # X = lle.loadX()
 
-    N = lle.getParam('N')
-    A0 = X[:N] + 1j * X[N:2*N]
-    c0, S0 = X[2*N:2*N+2]
-    t0 = np.zeros_like(X)
-    t0[-1] = 1
+    # N = lle.getParam('N')
+    # A0 = X[:N] + 1j * X[N:2*N]
+    # c0, S0 = X[2*N:2*N+2]
+    # t0 = np.zeros_like(X)
+    # t0[-1] = 1
 
-    lle.init_cont(0.1, t0, X)
+    # lle.init_cont(0.1, t0, X)
 
-    nX = X
-    nX = X # + lle.tangent * lle.ds
-    Y = lle.palc_rhs(nX)
+    # nX = X
+    # nX = X # + lle.tangent * lle.ds
+    # Y = lle.palc_rhs(nX)
 
-    print(f'Sum of Y is {Y.sum()}')
+    # A0 = X[:N] + 1j * X[N:2*N]
 
-    plt.plot(Y)
-    plt.show()
+    # print(f'Sum of Y is {Y.sum()}')
 
-    lle.test_jacobian(nX)
+    # plt.plot(Y)
+    # plt.show()
+
+    # lle.test_jacobian(nX)
 
     x = lle.tau
     x0 = (x[0] + x[-1]) / 2
-    #Are = 0.7 + 1 * np.exp(- (x - x0) ** 2 / 8)
-    #Aim = - 0.6 + 1 * np.exp(- (x - x0) ** 2 / 8)
+    Are = 0.5 + 1 * np.exp(- (x - x0) ** 2 / 30)
+    Aim = - 0.6 + 1 * np.exp(- (x - x0) ** 2 / 30)
     #Aim = 0
 
-    # A0 = Are + 1j * Aim
+    #A0 = Are + 1j * Aim
     A0 = lle.loadState(lle.getFilename(ext='.npy'))
-    # lle.setInitialConditionGaussian(50, 1, 0, 1)
+    #lle.setInitialConditionGaussian(50, 10, 0, 1)
     lle.setInitialCondition(A0)
 
 
@@ -484,7 +493,7 @@ if __name__ == "__main__":
     plt.plot(x, lle.A0.imag)
     plt.show()
 
-    lle.solve_dns(0, 1000)
+    lle.solve_dns(T_f=100, max_step=.0001)
 
     A = lle.getState(-1)
 
@@ -492,6 +501,8 @@ if __name__ == "__main__":
     plt.show()
 
     plt.plot(x, np.abs(A))
+    plt.plot(x, A.real)
+    plt.plot(x, A.imag)
     plt.show()
 
 

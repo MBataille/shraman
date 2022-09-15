@@ -6,3 +6,4 @@ from .bifdiag import parameterSweep, getPrange, readParameterSweep
 from .reader import (read_state, read_summary, 
                     write_state, readX, read_belgium,
                     interpolate)
+from .cont2dns import cont2dns
